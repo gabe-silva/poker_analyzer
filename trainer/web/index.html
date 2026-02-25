@@ -2,11 +2,79 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="refresh" content="0; url=/setup.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>LAG Cash Trainer</title>
+  <title>PokerNow Trainer - Plans</title>
+  <link rel="stylesheet" href="/styles.css" />
 </head>
-<body>
-  <p>Redirecting to <a href="/setup.html">setup</a>...</p>
+<body data-page="landing">
+  <div class="backdrop-orb orb-a"></div>
+  <div class="backdrop-orb orb-b"></div>
+  <div class="page-wrap">
+    <header class="top-hero">
+      <h1>PokerNow Trainer</h1>
+      <p>Upload PokerNow hand JSON, profile real players, and unlock deeper training as you move up tiers.</p>
+      <nav class="top-nav">
+        <a href="/index.html" class="nav-link active">Plans</a>
+        <a href="/play.html" class="nav-link">Analyzer</a>
+        <a href="/setup.html" class="nav-link">Trainer</a>
+        <a href="/login.html" class="nav-link">Account</a>
+      </nav>
+    </header>
+
+    <main class="landing-layout">
+      <section class="panel">
+        <h2>What You Get For Free</h2>
+        <ul class="landing-list">
+          <li>Upload PokerNow JSON files and analyze up to <strong>500 total hands</strong>.</li>
+          <li>Build a stats dashboard for <strong>one player profile</strong> from selected aliases.</li>
+          <li>See VPIP/PFR/3bet/AF/WTSD style breakdowns.</li>
+          <li>No exploit recommendations in Free.</li>
+        </ul>
+      </section>
+
+      <section class="tier-grid">
+        <article class="panel tier-card">
+          <h2>Free</h2>
+          <p class="tier-price">$0 / month</p>
+          <ul class="landing-list">
+            <li>Single player summary dashboard</li>
+            <li>Up to 500 uploaded hands total</li>
+            <li>No exploit report</li>
+          </ul>
+          <a class="btn-primary nav-button" href="/login.html?plan=free&next=%2Fplay.html">Start Free</a>
+        </article>
+
+        <article class="panel tier-card featured-tier">
+          <h2>Pro</h2>
+          <p class="tier-price">$29 / month</p>
+          <ul class="landing-list">
+            <li>Exploit report unlocked</li>
+            <li>Compare up to 2 player groups side-by-side</li>
+            <li>Up to 1000 hands per player target (2000 total)</li>
+          </ul>
+          <a class="btn-primary nav-button" href="/login.html?plan=pro&next=%2Fplay.html">Upgrade To Pro</a>
+        </article>
+
+        <article class="panel tier-card">
+          <h2>Elite</h2>
+          <p class="tier-price">Advanced Training Tier</p>
+          <ul class="landing-list">
+            <li>Everything in Pro</li>
+            <li>Train as selected player styles (TAG, LAG, Nit, etc.)</li>
+            <li>Play-vs-friend mode with full feedback and optimal guidance</li>
+          </ul>
+          <a class="btn-primary nav-button" href="/login.html?plan=elite&next=%2Fsetup.html">Unlock Elite</a>
+        </article>
+      </section>
+
+      <section class="panel">
+        <h2>Feature Locks</h2>
+        <p>
+          Free and Pro accounts can use the Analyzer page immediately. Advanced training pages and live play are hidden
+          unless your account is on Elite.
+        </p>
+      </section>
+    </main>
+  </div>
 </body>
 </html>

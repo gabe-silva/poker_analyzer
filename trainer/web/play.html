@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>LAG Cash Trainer - Play vs Profile</title>
+  <title>PokerNow Trainer - Analyzer & Play</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body data-page="play">
@@ -11,12 +11,13 @@
   <div class="backdrop-orb orb-b"></div>
   <div class="page-wrap">
     <header class="top-hero">
-      <h1>LAG Cash Game Trainer</h1>
-      <p>Play vs one profile in two modes: full-match simulation or single-hand EV drills.</p>
+      <h1>PokerNow Trainer</h1>
+      <p>Upload PokerNow files, profile friends, compare player groups, and unlock live training on Elite.</p>
       <nav class="top-nav">
+        <a href="/index.html" class="nav-link">Plans</a>
         <a href="/setup.html" class="nav-link">Setup</a>
         <a href="/trainer.html" class="nav-link">Trainer</a>
-        <a href="/play.html" class="nav-link active">Play</a>
+        <a href="/play.html" class="nav-link active">Analyzer</a>
         <a href="/standings.html" class="nav-link">Standings</a>
         <a href="/login.html" class="nav-link">Account</a>
       </nav>
@@ -24,8 +25,11 @@
 
     <main class="play-layout">
       <section class="panel">
-        <h2>Profile Setup</h2>
-        <div class="mode-toggle-row">
+        <h2>Plan & Profile Setup</h2>
+        <div id="planBadge" class="meta-strip"></div>
+        <div id="featureLockNotice" class="lock-banner" style="display:none;"></div>
+
+        <div id="modeToggleRow" class="mode-toggle-row">
           <label class="mode-pill">
             <input id="playModeFull" type="radio" name="playMode" value="full_match" checked />
             <span>Full Match</span>
@@ -35,23 +39,21 @@
             <span>Single Hand Drill</span>
           </label>
         </div>
+
         <div class="field-grid">
           <label>
-            Opponent Source
-            <select id="opponentSource">
-              <option value="preset">Preset</option>
-              <option value="analyzer">Analyzer Player</option>
-              <option value="custom">Custom</option>
-            </select>
+            Upload PokerNow JSON files
+            <input id="handsFiles" type="file" accept=".json,application/json" multiple />
           </label>
           <label>
-            Preset
-            <select id="presetKey"></select>
+            Friend usernames (select one or more aliases)
+            <select id="analyzerPlayers" multiple size="8"></select>
           </label>
-          <label>
-            Analyzer Player
-            <select id="analyzerPlayer"></select>
-          </label>
+          <div class="action-row">
+            <button id="uploadHandsBtn" class="btn-primary" type="button">Upload Hand Files</button>
+            <button id="refreshPlayersBtn" class="btn-ghost" type="button">Refresh Players</button>
+          </div>
+          <div id="handsStatus" class="meta-strip">No uploaded hand files yet.</div>
           <label>
             Starting Stack (bb)
             <input id="startingStackBb" type="number" min="20" max="400" step="1" value="100" />
@@ -60,27 +62,28 @@
             Random Seed (optional)
             <input id="liveSeed" type="number" min="1" step="1" placeholder="auto" />
           </label>
-          <label>
-            Opponent Name
-            <input id="customName" type="text" value="CUSTOM OPPONENT" />
+          <label id="trainingStyleWrap" style="display:none;">
+            Training Style For Hero
+            <select id="trainingStyle"></select>
           </label>
         </div>
 
-        <div class="hero-profile-block">
-          <h3>Custom Opponent Stats</h3>
+        <div class="action-row">
+          <button id="analyzeProfileBtn" class="btn-primary" type="button">Analyze Selected Profile</button>
+          <button id="compareProfilesBtn" class="btn-ghost" type="button">Compare Two Players</button>
+        </div>
+
+        <div id="compareConfig" class="hero-profile-block" style="display:none;">
+          <h3>Two-Player Compare (Pro+)</h3>
           <div class="field-grid">
-            <label>VPIP (%)<input id="cVpip" type="number" min="5" max="90" step="0.1" value="30" /></label>
-            <label>PFR (%)<input id="cPfr" type="number" min="3" max="70" step="0.1" value="20" /></label>
-            <label>3-Bet (%)<input id="c3bet" type="number" min="0" max="30" step="0.1" value="8" /></label>
-            <label>Fold to 3-Bet (%)<input id="cF3b" type="number" min="0" max="100" step="0.1" value="45" /></label>
-            <label>Limp Rate (%)<input id="cLimp" type="number" min="0" max="100" step="0.1" value="12" /></label>
-            <label>AF<input id="cAf" type="number" min="0.3" max="8" step="0.1" value="2.2" /></label>
-            <label>Flop C-Bet (%)<input id="cFlopCbet" type="number" min="0" max="100" step="0.1" value="58" /></label>
-            <label>Turn C-Bet (%)<input id="cTurnCbet" type="number" min="0" max="100" step="0.1" value="44" /></label>
-            <label>River C-Bet (%)<input id="cRiverCbet" type="number" min="0" max="100" step="0.1" value="32" /></label>
-            <label>WTSD (%)<input id="cWtsd" type="number" min="0" max="100" step="0.1" value="30" /></label>
-            <label>W$SD (%)<input id="cWsd" type="number" min="0" max="100" step="0.1" value="51" /></label>
-            <label>Check-Raise (%)<input id="cXr" type="number" min="0" max="100" step="0.1" value="9" /></label>
+            <label>
+              Player Group A (comma-separated aliases)
+              <input id="compareGroupA" type="text" placeholder="alice, alice_1, alice_home" />
+            </label>
+            <label>
+              Player Group B (comma-separated aliases)
+              <input id="compareGroupB" type="text" placeholder="bob, bob_alt" />
+            </label>
           </div>
         </div>
 
@@ -117,9 +120,20 @@
         </div>
       </section>
 
+      <section class="panel">
+        <h2>Profile Dashboard</h2>
+        <div id="profileDashboard" class="feedback-summary">Analyze a selected profile to see stats.</div>
+      </section>
+
+      <section class="panel" id="comparisonPanel">
+        <h2>Two-Player Comparison</h2>
+        <div id="comparisonDashboard" class="feedback-summary">Pro+ can compare two alias groups side-by-side.</div>
+      </section>
+
       <section id="fullModePanel" class="panel">
         <h2>Live Table</h2>
         <div id="liveMeta" class="meta-strip">No live session yet.</div>
+        <div id="balanceTracker" class="hero-profile-block">Balance tracker appears after match start.</div>
         <div id="liveTable" class="table-view empty">Start a match to play vs profile.</div>
         <div id="liveActions" class="decision-panel"></div>
       </section>

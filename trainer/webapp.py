@@ -11,14 +11,19 @@ from urllib.parse import quote
 
 from flask import Flask, g, jsonify, make_response, redirect, request, send_from_directory
 
-from trainer.billing import BillingConfig, BillingService, BillingStore
+from trainer.billing import (
+    PLAN_ELITE,
+    BillingConfig,
+    BillingService,
+    BillingStore,
+    plan_entitlements,
+)
 from trainer.service import TrainerService
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 WEB_ROOT = Path(__file__).resolve().parent / "web"
 
 PROTECTED_PAGE_PATHS = {
-    "/",
     "/setup",
     "/setup.html",
     "/trainer",
@@ -35,6 +40,7 @@ PUBLIC_API_PATHS = {
     "/api/auth/request-code",
     "/api/auth/verify-code",
     "/api/billing/create-checkout-session",
+    "/api/billing/plans",
     "/api/billing/webhook",
 }
 
@@ -79,11 +85,11 @@ def _is_subpath(child: Path, parent: Path) -> bool:
 def _safe_next_path(raw_next: str) -> str:
     nxt = str(raw_next or "").strip()
     if not nxt:
-        return "/setup.html"
+        return "/play.html"
     if not nxt.startswith("/"):
-        return "/setup.html"
+        return "/play.html"
     if nxt.startswith("//"):
-        return "/setup.html"
+        return "/play.html"
     return nxt
 
 
@@ -130,10 +136,12 @@ def _load_runtime_config() -> RuntimeConfig:
 
 
 def _load_billing_config(runtime: RuntimeConfig) -> BillingConfig:
+    legacy_price_id = str(os.getenv("STRIPE_PRICE_ID", "")).strip()
     return BillingConfig(
         stripe_secret_key=str(os.getenv("STRIPE_SECRET_KEY", "")).strip(),
         stripe_webhook_secret=str(os.getenv("STRIPE_WEBHOOK_SECRET", "")).strip(),
-        stripe_price_id=str(os.getenv("STRIPE_PRICE_ID", "")).strip(),
+        stripe_price_id_pro=str(os.getenv("STRIPE_PRICE_ID_PRO", legacy_price_id)).strip(),
+        stripe_price_id_elite=str(os.getenv("STRIPE_PRICE_ID_ELITE", "")).strip(),
         session_ttl_seconds=runtime.session_ttl_seconds,
         login_code_ttl_seconds=max(120, _env_int("TRAINER_LOGIN_CODE_TTL_SECONDS", 600)),
         login_code_cooldown_seconds=max(0, _env_int("TRAINER_LOGIN_CODE_COOLDOWN_SECONDS", 60)),
@@ -142,6 +150,7 @@ def _load_billing_config(runtime: RuntimeConfig) -> BillingConfig:
         mailgun_from_email=str(
             os.getenv("MAILGUN_FROM_EMAIL", "Poker Trainer <noreply@localhost>")
         ).strip(),
+        allow_free_tier=_env_bool("TRAINER_ALLOW_FREE_TIER", True),
         expose_login_codes=_env_bool(
             "TRAINER_EXPOSE_LOGIN_CODES",
             runtime.env != "production",
@@ -192,6 +201,25 @@ def create_app() -> Flask:
             return True
         return False
 
+    def _effective_plan() -> dict:
+        if not runtime.require_auth:
+            dev = plan_entitlements(PLAN_ELITE)
+            dev["status"] = "development"
+            dev["active"] = True
+            dev["paid"] = True
+            dev["email"] = None
+            return dev
+        email = str(getattr(g, "current_user_email", "")).strip()
+        if not email:
+            return billing.account_plan(None)
+        return billing.account_plan(email)
+
+    def _require_plan_feature(feature_key: str, message: str):
+        plan = _effective_plan()
+        if bool(plan.get(feature_key)):
+            return None
+        return _api_error(message, status=403)
+
     @app.before_request
     def _before_request():
         host = str(request.headers.get("X-Forwarded-Host") or request.host).split(",")[0].strip().lower()
@@ -225,6 +253,7 @@ def create_app() -> Flask:
                 next_url = next_url[:-1]
             return redirect(f"/login?next={quote(next_url, safe='')}")
         g.current_user_email = email
+        g.current_user_plan = billing.account_plan(email)
         return None
 
     @app.after_request
@@ -255,7 +284,7 @@ def create_app() -> Flask:
     @app.get("/billing/success")
     def billing_success():
         session_id = str(request.args.get("session_id", "")).strip()
-        next_path = _safe_next_path(str(request.args.get("next", "/setup.html")))
+        next_path = _safe_next_path(str(request.args.get("next", "/play.html")))
         if not session_id:
             return redirect("/login?error=missing_session")
         try:
@@ -270,13 +299,20 @@ def create_app() -> Flask:
     def auth_status():
         token = str(request.cookies.get(runtime.cookie_name, "")).strip()
         email = billing.session_email(token) if token else None
+        plan = billing.account_plan(email)
         return jsonify(
             {
                 "authenticated": bool(email),
                 "email": email,
                 "billing_enabled": billing.enabled,
+                "plan": plan,
+                "plans": billing.plan_catalog(),
             }
         )
+
+    @app.get("/api/billing/plans")
+    def billing_plans():
+        return jsonify({"plans": billing.plan_catalog()})
 
     @app.post("/api/auth/request-code")
     def auth_request_code():
@@ -318,11 +354,13 @@ def create_app() -> Flask:
     def create_checkout_session():
         payload = request.get_json(silent=True) or {}
         email = str(payload.get("email", "")).strip()
+        plan_tier = str(payload.get("plan_tier", "pro")).strip().lower()
         try:
             session = billing.create_checkout_session(
                 email=email,
                 success_url=f"{_base_url()}/billing/success?session_id={{CHECKOUT_SESSION_ID}}",
                 cancel_url=f"{_base_url()}/billing/cancel",
+                plan_tier=plan_tier,
             )
             return jsonify(session)
         except ValueError as exc:
@@ -372,6 +410,12 @@ def create_app() -> Flask:
 
     @app.get("/api/progress")
     def api_progress():
+        blocked = _require_plan_feature(
+            "allow_training_workbench",
+            "Upgrade to Elite to access the training standings dashboard.",
+        )
+        if blocked:
+            return blocked
         return jsonify(service.progress())
 
     @app.get("/api/opponent_profile")
@@ -379,13 +423,96 @@ def create_app() -> Flask:
         name = str(request.args.get("name", "")).strip()
         if not name:
             return _api_error("name is required", status=400)
+        plan = _effective_plan()
         try:
-            return jsonify(service.analyzer_profile(name))
+            return jsonify(
+                service.analyzer_profile(
+                    name,
+                    include_exploits=bool(plan.get("show_exploits")),
+                    max_usernames=int(plan.get("max_aliases_per_profile", 12)),
+                )
+            )
+        except Exception as exc:  # noqa: BLE001
+            return _api_error(str(exc), status=400)
+
+    @app.post("/api/opponent/compare")
+    def api_opponent_compare():
+        plan = _effective_plan()
+        if not bool(plan.get("allow_multi_profile_compare")):
+            return _api_error(
+                "Upgrade to Pro to compare multiple friend profiles.",
+                status=403,
+            )
+        payload = request.get_json(silent=True) or {}
+        groups = payload.get("groups")
+        if not isinstance(groups, list) or not groups:
+            return _api_error("groups is required and must be a list", status=400)
+
+        max_groups = int(plan.get("max_compare_groups", 1))
+        if len(groups) > max_groups:
+            return _api_error(
+                f"Your plan supports up to {max_groups} comparison group(s).",
+                status=403,
+            )
+        profiles = []
+        try:
+            for idx, group in enumerate(groups):
+                if not isinstance(group, dict):
+                    return _api_error("Each group must be an object", status=400)
+                usernames = group.get("usernames")
+                if isinstance(usernames, list):
+                    selected = [str(v).strip() for v in usernames if str(v).strip()]
+                else:
+                    selected = []
+                if not selected:
+                    return _api_error(f"Group {idx + 1} requires at least one username", status=400)
+                profile = service.analyzer_profile(
+                    ",".join(selected),
+                    include_exploits=bool(plan.get("show_exploits")),
+                    max_usernames=int(plan.get("max_aliases_per_profile", 12)),
+                )
+                profile["group_label"] = str(group.get("label", f"Player {idx + 1}")).strip() or f"Player {idx + 1}"
+                profiles.append(profile)
+            return jsonify({"profiles": profiles})
+        except Exception as exc:  # noqa: BLE001
+            return _api_error(str(exc), status=400)
+
+    @app.get("/api/hands/players")
+    def api_hands_players():
+        try:
+            return jsonify(service.hands_players())
+        except Exception as exc:  # noqa: BLE001
+            return _api_error(str(exc), status=400)
+
+    @app.post("/api/hands/upload")
+    def api_hands_upload():
+        plan = _effective_plan()
+        uploaded = request.files.getlist("files")
+        if not uploaded:
+            return _api_error("No files uploaded. Use multipart/form-data field name 'files'.", status=400)
+        file_items = []
+        for file_storage in uploaded:
+            filename = str(getattr(file_storage, "filename", "") or "").strip()
+            blob = file_storage.read() or b""
+            file_items.append((filename, bytes(blob)))
+        try:
+            return jsonify(
+                service.upload_hands(
+                    file_items,
+                    max_total_hands=int(plan.get("max_upload_hands", 500)),
+                )
+            )
         except Exception as exc:  # noqa: BLE001
             return _api_error(str(exc), status=400)
 
     @app.get("/api/live/state")
     def api_live_state():
+        blocked = _require_plan_feature(
+            "allow_live_training",
+            "Upgrade to Elite to use play-vs-friend live training mode.",
+        )
+        if blocked:
+            return blocked
         session_id = str(request.args.get("session_id", "")).strip()
         if not session_id:
             return _api_error("session_id is required", status=400)
@@ -403,32 +530,73 @@ def create_app() -> Flask:
 
     @app.post("/api/generate")
     def api_generate():
+        blocked = _require_plan_feature(
+            "allow_training_workbench",
+            "Upgrade to Elite to generate training scenarios.",
+        )
+        if blocked:
+            return blocked
         return _json_post(service.generate)
 
     @app.post("/api/evaluate")
     def api_evaluate():
+        blocked = _require_plan_feature(
+            "allow_training_workbench",
+            "Upgrade to Elite to run EV evaluations.",
+        )
+        if blocked:
+            return blocked
         return _json_post(service.evaluate)
 
     @app.post("/api/clear_saved_hands")
     def api_clear_saved():
+        blocked = _require_plan_feature(
+            "allow_training_workbench",
+            "Upgrade to Elite to clear training history.",
+        )
+        if blocked:
+            return blocked
         return _json_post(lambda _payload: service.clear_saved_hands())
 
     @app.post("/api/live/start")
     def api_live_start():
+        blocked = _require_plan_feature(
+            "allow_live_training",
+            "Upgrade to Elite to start live training matches.",
+        )
+        if blocked:
+            return blocked
         return _json_post(service.live_start)
 
     @app.post("/api/live/action")
     def api_live_action():
+        blocked = _require_plan_feature(
+            "allow_live_training",
+            "Upgrade to Elite to submit live training actions.",
+        )
+        if blocked:
+            return blocked
         return _json_post(service.live_action)
 
     @app.post("/api/live/new_hand")
     def api_live_new_hand():
+        blocked = _require_plan_feature(
+            "allow_live_training",
+            "Upgrade to Elite to deal new live training hands.",
+        )
+        if blocked:
+            return blocked
         return _json_post(service.live_new_hand)
 
     def _serve_page(filename: str):
         return send_from_directory(str(WEB_ROOT), filename)
 
     @app.get("/")
+    @app.get("/index")
+    @app.get("/index.html")
+    def landing_page():
+        return _serve_page("index.html")
+
     @app.get("/setup")
     @app.get("/setup.html")
     def setup_page():
@@ -456,7 +624,7 @@ def create_app() -> Flask:
             return _api_error("Not found", status=404)
         if not candidate.exists() or not candidate.is_file():
             return _api_error("Not found", status=404)
-        if candidate.suffix.lower() not in {".html", ".css", ".js", ".png", ".svg", ".ico"}:
+        if candidate.suffix.lower() not in {".html", ".css", ".js", ".png", ".jpg", ".jpeg", ".svg", ".ico", ".webp"}:
             return _api_error("Not found", status=404)
         return send_from_directory(str(WEB_ROOT), filename)
 

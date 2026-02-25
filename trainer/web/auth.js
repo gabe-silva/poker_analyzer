@@ -2,16 +2,20 @@ const els = {};
 const params = new URLSearchParams(window.location.search);
 const nextPath = sanitizeNext(params.get("next"));
 
+let authSnapshot = null;
+let plansSnapshot = [];
+
 document.addEventListener("DOMContentLoaded", () => {
   mapIds([
     "emailInput",
     "codeInput",
-    "subscribeBtn",
+    "startPlanBtn",
     "requestCodeBtn",
     "verifyCodeBtn",
     "portalBtn",
     "continueBtn",
     "logoutBtn",
+    "planSummary",
     "statusLine",
   ]);
   bindEvents();
@@ -25,7 +29,7 @@ function mapIds(ids) {
 }
 
 function bindEvents() {
-  els.subscribeBtn?.addEventListener("click", startCheckout);
+  els.startPlanBtn?.addEventListener("click", continueWithSelectedPlan);
   els.requestCodeBtn?.addEventListener("click", requestCode);
   els.verifyCodeBtn?.addEventListener("click", verifyCode);
   els.portalBtn?.addEventListener("click", openBillingPortal);
@@ -33,15 +37,24 @@ function bindEvents() {
     window.location.href = nextPath;
   });
   els.logoutBtn?.addEventListener("click", logout);
+  document.querySelectorAll("input[name='planTier']").forEach((input) => {
+    input.addEventListener("change", renderPlanSummary);
+  });
 }
 
 async function bootstrap() {
   const status = await apiGet("/api/auth/status");
+  authSnapshot = status;
+  plansSnapshot = Array.isArray(status?.plans) ? status.plans : [];
+
+  const preselect = normalizePlanTier(params.get("plan"));
+  setSelectedPlanTier(preselect || status?.plan?.tier || "free");
+
   if (status.authenticated && status.email) {
     els.emailInput.value = status.email;
     setStatus(`Signed in as ${status.email}.`);
   } else {
-    setStatus("Enter your email to subscribe or receive a login code.");
+    setStatus("Enter your email, choose a plan, then request a login code.");
   }
 
   const billing = params.get("billing");
@@ -52,9 +65,71 @@ async function bootstrap() {
   if (error === "payment_not_verified") {
     setStatus("Could not verify payment. Contact support if this persists.", true);
   }
+
+  renderPlanSummary();
 }
 
-async function startCheckout() {
+function normalizePlanTier(raw) {
+  const tier = String(raw || "").trim().toLowerCase();
+  if (tier === "pro" || tier === "elite" || tier === "free") return tier;
+  return "";
+}
+
+function selectedPlanTier() {
+  const checked = document.querySelector("input[name='planTier']:checked");
+  return normalizePlanTier(checked?.value) || "free";
+}
+
+function setSelectedPlanTier(tier) {
+  const target = normalizePlanTier(tier) || "free";
+  const input = document.querySelector(`input[name='planTier'][value='${target}']`);
+  if (input) {
+    input.checked = true;
+  }
+}
+
+function planByTier(tier) {
+  return plansSnapshot.find((p) => normalizePlanTier(p?.tier) === normalizePlanTier(tier)) || null;
+}
+
+function renderPlanSummary() {
+  if (!els.planSummary) return;
+  const tier = selectedPlanTier();
+  const selected = planByTier(tier);
+  const currentTier = normalizePlanTier(authSnapshot?.plan?.tier) || "free";
+  const currentLabel = String(authSnapshot?.plan?.label || currentTier).trim();
+  const checkoutEnabled = !!selected?.checkout_enabled;
+
+  const parts = [];
+  parts.push(`Current plan: ${currentLabel}`);
+
+  if (tier === "free") {
+    parts.push("Free uses email-code login directly.");
+  } else if (!checkoutEnabled) {
+    parts.push(`${tier.toUpperCase()} checkout is not configured yet.`);
+  } else {
+    const price = Number(selected?.monthly_price_usd || 0);
+    const text = price > 0 ? `$${price}/mo` : "paid tier";
+    parts.push(`${tier.toUpperCase()} checkout ready (${text}).`);
+  }
+
+  if (currentTier === tier) {
+    parts.push("You can request a login code now.");
+  }
+
+  els.planSummary.textContent = parts.join(" ");
+}
+
+async function continueWithSelectedPlan() {
+  const tier = selectedPlanTier();
+  if (tier === "free") {
+    await requestCode();
+    return;
+  }
+  await startCheckout(tier);
+}
+
+async function startCheckout(planTier) {
   const email = normalizedEmail();
   if (!email) {
     setStatus("Enter a valid email first.", true);
@@ -62,7 +137,10 @@ async function startCheckout() {
   }
   setBusy(true);
   try {
-    const session = await apiPost("/api/billing/create-checkout-session", { email });
+    const session = await apiPost("/api/billing/create-checkout-session", {
+      email,
+      plan_tier: planTier,
+    });
     if (!session?.url) {
       throw new Error("Checkout URL missing from server response");
     }
@@ -84,7 +162,8 @@ async function requestCode() {
   try {
     const response = await apiPost("/api/auth/request-code", { email });
     const debug = response.debug_code ? ` Debug code: ${response.debug_code}` : "";
-    setStatus(`Login code sent to ${email}.${debug}`);
+    const planNote = response.plan_tier ? ` (${String(response.plan_tier).toUpperCase()} access)` : "";
+    setStatus(`Login code sent to ${email}${planNote}.${debug}`);
   } catch (err) {
     setStatus(err.message, true);
   } finally {
@@ -148,15 +227,15 @@ function normalizedEmail() {
 
 function sanitizeNext(raw) {
   const value = String(raw || "").trim();
-  if (!value) return "/setup.html";
-  if (!value.startsWith("/")) return "/setup.html";
-  if (value.startsWith("//")) return "/setup.html";
+  if (!value) return "/play.html";
+  if (!value.startsWith("/")) return "/play.html";
+  if (value.startsWith("//")) return "/play.html";
   return value;
 }
 
 function setBusy(isBusy) {
   [
-    els.subscribeBtn,
+    els.startPlanBtn,
     els.requestCodeBtn,
     els.verifyCodeBtn,
     els.portalBtn,

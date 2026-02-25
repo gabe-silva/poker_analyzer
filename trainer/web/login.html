@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Poker Trainer - Access</title>
+  <title>PokerNow Trainer - Account</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body data-page="login">
@@ -11,13 +11,19 @@
   <div class="backdrop-orb orb-b"></div>
   <div class="page-wrap">
     <header class="top-hero">
-      <h1>Poker Trainer Access</h1>
-      <p>Start your subscription, then sign in with a one-time email code.</p>
+      <h1>PokerNow Trainer Account</h1>
+      <p>Select a tier, then sign in with a one-time email code.</p>
+      <nav class="top-nav">
+        <a href="/index.html" class="nav-link">Plans</a>
+        <a href="/play.html" class="nav-link">Analyzer</a>
+        <a href="/setup.html" class="nav-link">Trainer</a>
+        <a href="/login.html" class="nav-link active">Account</a>
+      </nav>
     </header>
 
     <main class="auth-layout">
       <section class="panel auth-panel">
-        <h2>Account Access</h2>
+        <h2>Access</h2>
         <div class="field-grid">
           <label>
             Email
@@ -29,18 +35,25 @@
           </label>
         </div>
 
+        <div id="planSelector" class="mode-toggle-row">
+          <label class="mode-pill"><input type="radio" name="planTier" value="free" checked /><span>Free</span></label>
+          <label class="mode-pill"><input type="radio" name="planTier" value="pro" /><span>Pro ($29/mo)</span></label>
+          <label class="mode-pill"><input type="radio" name="planTier" value="elite" /><span>Elite</span></label>
+        </div>
+
         <div class="action-row">
-          <button id="subscribeBtn" class="btn-primary">Start Subscription</button>
+          <button id="startPlanBtn" class="btn-primary">Continue With Plan</button>
           <button id="requestCodeBtn" class="btn-ghost">Email Login Code</button>
           <button id="verifyCodeBtn" class="btn-ghost">Verify & Sign In</button>
         </div>
 
         <div class="action-row">
           <button id="portalBtn" class="btn-ghost">Manage Billing</button>
-          <button id="continueBtn" class="btn-ghost">Open Trainer</button>
+          <button id="continueBtn" class="btn-ghost">Open App</button>
           <button id="logoutBtn" class="btn-ghost">Log Out</button>
         </div>
 
+        <div id="planSummary" class="meta-strip"></div>
         <p id="statusLine" class="status-line"></p>
       </section>
     </main>

@@ -4,6 +4,7 @@ const LAST_SCENARIO_KEY = "trainer:lastScenarioId";
 const state = {
   page: null,
   config: null,
+  auth: null,
   scenario: null,
   selectedAction: null,
   selectedSize: null,
@@ -38,6 +39,23 @@ function cloneObject(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function planAllowsTrainingWorkbench() {
+  return !!state.auth?.plan?.allow_training_workbench;
+}
+
+function lockPanel(id, message) {
+  const node = document.getElementById(id);
+  if (!node) return;
+  node.style.display = "block";
+  node.textContent = message;
+}
+
+function disabledByLock(selector) {
+  document.querySelectorAll(selector).forEach((node) => {
+    node.disabled = true;
+  });
+}
+
 function loadSetupDraft() {
   const raw = localStorage.getItem(SETUP_STORAGE_KEY);
   if (!raw) return null;
@@ -61,50 +79,54 @@ function defaultSetupDraftFromConfig(config) {
     node_type: config.defaults.node_type,
     action_context: config.defaults.action_context,
     hero_position: config.defaults.hero_position,
+    hero_training_style: "balanced_default",
     players_in_hand: config.defaults.players_in_hand,
     equal_stacks: !!config.defaults.equal_stacks,
     default_stack_bb: Number(config.defaults.default_stack_bb),
     sb: Number(config.defaults.sb || 1),
     bb: Number(config.defaults.bb || 2),
-    randomize_hero_profile: !!config.defaults.randomize_hero_profile,
     randomize_archetypes: !!config.defaults.randomize_archetypes,
-    hero_profile: {
-      vpip: Number((config.defaults.hero_profile?.vpip || 0.3) * 100),
-      pfr: Number((config.defaults.hero_profile?.pfr || 0.22) * 100),
-      af: Number(config.defaults.hero_profile?.af || 2.8),
-      three_bet: Number((config.defaults.hero_profile?.three_bet || 0.09) * 100),
-      fold_to_3bet: Number((config.defaults.hero_profile?.fold_to_3bet || 0.54) * 100),
-    },
     seats: [],
   };
 }
 
 async function bootstrapSetup() {
   mapIds([
+    "trainerLockNotice",
     "numPlayers",
     "street",
     "nodeType",
     "actionContext",
     "heroPosition",
+    "heroTrainingStyle",
     "playersInHand",
     "defaultStack",
     "seed",
     "equalStacks",
-    "randomizeHeroProfile",
     "randomizeArchetypes",
-    "heroVpip",
-    "heroPfr",
-    "heroAf",
-    "hero3bet",
-    "heroFold3bet",
     "seatConfigTable",
     "generateBtn",
     "statusLine",
   ]);
 
+  state.auth = await apiGet("/api/auth/status");
+
   const config = await apiGet("/api/config");
   state.config = config;
   initSetupControls(config);
+
+  if (!planAllowsTrainingWorkbench()) {
+    lockPanel(
+      "trainerLockNotice",
+      "Elite tier required for scenario generation. Use the Analyzer page for free/pro profile stats.",
+    );
+    disabledByLock(
+      "#numPlayers,#street,#nodeType,#actionContext,#heroPosition,#heroTrainingStyle,#playersInHand,#defaultStack,#seed,#equalStacks,#randomizeArchetypes,#generateBtn",
+    );
+    setStatus("Training setup is locked on your current tier.", true);
+    renderSeatConfigTable();
+    return;
+  }
 
   const stored = loadSetupDraft();
   if (stored) {
@@ -116,7 +138,6 @@ async function bootstrapSetup() {
   }
 
   bindSetupEvents();
-  syncHeroProfileInputState();
 
   const previousScenario = localStorage.getItem(LAST_SCENARIO_KEY);
   if (previousScenario) {
@@ -138,22 +159,28 @@ function initSetupControls(config) {
       label: titleCase(v.replaceAll("_", " ")),
     })),
   );
+  fillSelect(
+    els.heroTrainingStyle,
+    [
+      { value: "balanced_default", label: "Balanced (Optimal Baseline)" },
+      ...config.archetypes.map((a) => ({
+        value: a.key,
+        label: `${a.label} Training`,
+      })),
+    ],
+  );
 
   els.numPlayers.value = String(config.defaults.num_players);
   els.street.value = config.defaults.street;
   els.nodeType.value = config.defaults.node_type;
   els.actionContext.value = config.defaults.action_context;
+  if (els.heroTrainingStyle) {
+    els.heroTrainingStyle.value = "balanced_default";
+  }
   els.playersInHand.value = String(config.defaults.players_in_hand);
   els.defaultStack.value = String(config.defaults.default_stack_bb);
   els.equalStacks.checked = !!config.defaults.equal_stacks;
-  els.randomizeHeroProfile.checked = !!config.defaults.randomize_hero_profile;
   els.randomizeArchetypes.checked = !!config.defaults.randomize_archetypes;
-
-  els.heroVpip.value = Number((config.defaults.hero_profile?.vpip || 0.3) * 100).toFixed(1);
-  els.heroPfr.value = Number((config.defaults.hero_profile?.pfr || 0.22) * 100).toFixed(1);
-  els.heroAf.value = Number(config.defaults.hero_profile?.af || 2.8).toFixed(1);
-  els.hero3bet.value = Number((config.defaults.hero_profile?.three_bet || 0.09) * 100).toFixed(1);
-  els.heroFold3bet.value = Number((config.defaults.hero_profile?.fold_to_3bet || 0.54) * 100).toFixed(1);
 
   refreshHeroPositionOptions();
 }
@@ -172,18 +199,14 @@ function applySetupDraftToControls(draft) {
   els.street.value = merged.street || defaults.street;
   els.nodeType.value = merged.node_type || defaults.node_type;
   els.actionContext.value = merged.action_context || defaults.action_context;
+  if (els.heroTrainingStyle) {
+    els.heroTrainingStyle.value = merged.hero_training_style || defaults.hero_training_style || "balanced_default";
+  }
   els.playersInHand.value = String(merged.players_in_hand || defaults.players_in_hand);
   els.defaultStack.value = String(merged.default_stack_bb || defaults.default_stack_bb);
   els.equalStacks.checked = !!merged.equal_stacks;
-  els.randomizeHeroProfile.checked = !!merged.randomize_hero_profile;
   els.randomizeArchetypes.checked = !!merged.randomize_archetypes;
   els.seed.value = merged.seed ? String(merged.seed) : "";
-
-  els.heroVpip.value = Number(merged.hero_profile?.vpip ?? defaults.hero_profile.vpip).toFixed(1);
-  els.heroPfr.value = Number(merged.hero_profile?.pfr ?? defaults.hero_profile.pfr).toFixed(1);
-  els.heroAf.value = Number(merged.hero_profile?.af ?? defaults.hero_profile.af).toFixed(1);
-  els.hero3bet.value = Number(merged.hero_profile?.three_bet ?? defaults.hero_profile.three_bet).toFixed(1);
-  els.heroFold3bet.value = Number(merged.hero_profile?.fold_to_3bet ?? defaults.hero_profile.fold_to_3bet).toFixed(1);
 
   state.seatDraft = {};
   for (const seat of merged.seats || []) {
@@ -219,22 +242,14 @@ function bindSetupEvents() {
     renderSeatConfigTable();
     persistSetupDraftFromInputs();
   });
-  els.randomizeHeroProfile.addEventListener("change", () => {
-    syncHeroProfileInputState();
-    persistSetupDraftFromInputs();
-  });
 
   [
     els.street,
     els.nodeType,
     els.actionContext,
+    els.heroTrainingStyle,
     els.playersInHand,
     els.seed,
-    els.heroVpip,
-    els.heroPfr,
-    els.heroAf,
-    els.hero3bet,
-    els.heroFold3bet,
   ].forEach((input) => {
     if (!input) return;
     input.addEventListener("change", persistSetupDraftFromInputs);
@@ -282,13 +297,6 @@ function archetypeOptionsHtml(selected) {
   return state.config.archetypes
     .map((a) => `<option value="${a.key}" ${a.key === selected ? "selected" : ""}>${a.label}</option>`)
     .join("");
-}
-
-function syncHeroProfileInputState() {
-  const disabled = !!els.randomizeHeroProfile.checked;
-  ["heroVpip", "heroPfr", "heroAf", "hero3bet", "heroFold3bet"].forEach((id) => {
-    if (els[id]) els[id].disabled = disabled;
-  });
 }
 
 function captureSeatDraft() {
@@ -385,33 +393,54 @@ function collectSeatPayload() {
   return seats;
 }
 
+function heroProfileFromTrainingStyle(styleKey) {
+  const key = String(styleKey || "").trim();
+  if (!key || key === "balanced_default") {
+    return null;
+  }
+  const archetype = (state.config?.archetypes || []).find((row) => row.key === key);
+  if (!archetype) {
+    return null;
+  }
+  const vpip = Number(archetype.vpip || 0.3);
+  const pfr = Number(archetype.pfr || 0.22);
+  const af = Number(archetype.af || 2.8);
+  const threeBet = Math.min(0.28, Math.max(0.02, pfr * 0.42));
+  const foldToThreeBet = Math.min(0.82, Math.max(0.22, 0.58 - (pfr - 0.2) * 0.3));
+  return {
+    vpip,
+    pfr,
+    af,
+    three_bet: Number(threeBet.toFixed(3)),
+    fold_to_3bet: Number(foldToThreeBet.toFixed(3)),
+  };
+}
+
 function buildSetupPayloadFromInputs() {
   captureSeatDraft();
+  const trainingStyle = String(els.heroTrainingStyle?.value || "balanced_default").trim() || "balanced_default";
   const payload = {
     num_players: Number(els.numPlayers.value),
     street: els.street.value,
     node_type: els.nodeType.value,
     action_context: els.actionContext.value,
     hero_position: els.heroPosition.value,
+    hero_training_style: trainingStyle,
     players_in_hand: Number(els.playersInHand.value),
     equal_stacks: !!els.equalStacks.checked,
     default_stack_bb: Number(els.defaultStack.value),
     sb: 1,
     bb: 2,
-    randomize_hero_profile: !!els.randomizeHeroProfile.checked,
     randomize_archetypes: !!els.randomizeArchetypes.checked,
-    hero_profile: {
-      vpip: Number(els.heroVpip.value || 30),
-      pfr: Number(els.heroPfr.value || 22),
-      af: Number(els.heroAf.value || 2.8),
-      three_bet: Number(els.hero3bet.value || 9),
-      fold_to_3bet: Number(els.heroFold3bet.value || 54),
-    },
     seats: collectSeatPayload(),
   };
   const seedText = String(els.seed.value || "").trim();
   if (seedText) {
     payload.seed = Number(seedText);
+  }
+  const profile = heroProfileFromTrainingStyle(trainingStyle);
+  if (profile) {
+    payload.hero_profile = profile;
   }
   return payload;
 }
@@ -457,6 +486,7 @@ async function generateScenarioFromSetup() {
 
 async function bootstrapTrainer() {
   mapIds([
+    "trainerPageLockNotice",
     "scenarioMeta",
     "tableView",
     "decisionPrompt",
@@ -467,6 +497,26 @@ async function bootstrapTrainer() {
     "regenerateBtn",
     "statusLine",
   ]);
+
+  state.auth = await apiGet("/api/auth/status");
+  if (!planAllowsTrainingWorkbench()) {
+    lockPanel(
+      "trainerPageLockNotice",
+      "Elite tier required for EV training. Upgrade to unlock scenario generation and scoring.",
+    );
+    if (els.decisionPanel) {
+      els.decisionPanel.innerHTML = "";
+    }
+    if (els.tableView) {
+      els.tableView.classList.add("empty");
+      els.tableView.textContent = "Training is locked on your current plan.";
+    }
+    if (els.regenerateBtn) {
+      els.regenerateBtn.disabled = true;
+    }
+    setStatus("Trainer page is locked on your current tier.", true);
+    return;
+  }
 
   if (els.regenerateBtn) {
     els.regenerateBtn.addEventListener("click", regenerateSameSetupScenario);
@@ -520,7 +570,7 @@ function renderScenario(s) {
   const randFlags = s.randomization || {};
   els.scenarioMeta.textContent =
     `ID ${s.scenario_id} | ${titleCase(s.street)} | ${titleCase(s.node_type.replaceAll("_", " "))} | ` +
-    `${s.players_in_hand}/${s.num_players} in hand | Hero random: ${!!randFlags.hero_profile} | Opponents random: ${!!randFlags.archetypes}`;
+    `${s.players_in_hand}/${s.num_players} in hand | Opponents random: ${!!randFlags.archetypes}`;
 
   const boardCards = s.board.map(cardNode).join("");
   const heroCards = s.hero_hand.map(cardNode).join("");
@@ -539,17 +589,12 @@ function renderScenario(s) {
     .join("");
 
   const history = s.action_history.map((line) => `<li>${escapeHtml(line)}</li>`).join("");
-  const heroStats = s.hero_profile || {};
   els.tableView.classList.remove("empty");
   els.tableView.innerHTML = `
     <div class="table-headline">
       <span>Pot: ${s.pot_bb}bb</span>
       <span>To call: ${s.to_call_bb}bb</span>
       <span>Eff stack: ${s.effective_stack_bb}bb</span>
-    </div>
-    <div class="table-headline">
-      <span>Hero VPIP/PFR/AF: ${Number((heroStats.vpip || 0) * 100).toFixed(1)} / ${Number((heroStats.pfr || 0) * 100).toFixed(1)} / ${Number(heroStats.af || 0).toFixed(2)}</span>
-      <span>Style: ${escapeHtml(heroStats.style_label || "N/A")}</span>
     </div>
     <div><strong>Board:</strong> <div class="board-row">${boardCards || "<em>(preflop)</em>"}</div></div>
     <div><strong>Hero:</strong> <div class="board-row">${heroCards}</div></div>
@@ -827,7 +872,21 @@ function renderLeakReport(report) {
 }
 
 async function bootstrapStandings() {
-  mapIds(["progressWrap", "refreshProgressBtn", "clearSavedBtn", "statusLine"]);
+  mapIds(["standingsLockNotice", "progressWrap", "refreshProgressBtn", "clearSavedBtn", "statusLine"]);
+  state.auth = await apiGet("/api/auth/status");
+  if (!planAllowsTrainingWorkbench()) {
+    lockPanel(
+      "standingsLockNotice",
+      "Elite tier required for standings and attempt history.",
+    );
+    if (els.refreshProgressBtn) els.refreshProgressBtn.disabled = true;
+    if (els.clearSavedBtn) els.clearSavedBtn.disabled = true;
+    if (els.progressWrap) {
+      els.progressWrap.textContent = "Standings are locked on your current plan.";
+    }
+    setStatus("Standings are locked on your current tier.", true);
+    return;
+  }
   if (els.refreshProgressBtn) {
     els.refreshProgressBtn.addEventListener("click", refreshProgress);
   }

@@ -25,6 +25,63 @@ except ModuleNotFoundError:  # pragma: no cover - allows local tests without str
 ACTIVE_SUBSCRIPTION_STATUSES = {"active", "trialing"}
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
+PLAN_FREE = "free"
+PLAN_PRO = "pro"
+PLAN_ELITE = "elite"
+PLAN_TIERS = {PLAN_FREE, PLAN_PRO, PLAN_ELITE}
+PAID_PLAN_TIERS = {PLAN_PRO, PLAN_ELITE}
+
+PLAN_ENTITLEMENTS: Dict[str, Dict[str, Any]] = {
+    PLAN_FREE: {
+        "tier": PLAN_FREE,
+        "label": "Free",
+        "monthly_price_usd": 0,
+        "max_upload_hands": 500,
+        "max_aliases_per_profile": 12,
+        "max_compare_groups": 1,
+        "show_exploits": False,
+        "allow_multi_profile_compare": False,
+        "allow_training_workbench": False,
+        "allow_live_training": False,
+    },
+    PLAN_PRO: {
+        "tier": PLAN_PRO,
+        "label": "Pro",
+        "monthly_price_usd": 29,
+        "max_upload_hands": 2000,
+        "max_aliases_per_profile": 20,
+        "max_compare_groups": 2,
+        "show_exploits": True,
+        "allow_multi_profile_compare": True,
+        "allow_training_workbench": False,
+        "allow_live_training": False,
+    },
+    PLAN_ELITE: {
+        "tier": PLAN_ELITE,
+        "label": "Elite",
+        "monthly_price_usd": 79,
+        "max_upload_hands": 6000,
+        "max_aliases_per_profile": 30,
+        "max_compare_groups": 4,
+        "show_exploits": True,
+        "allow_multi_profile_compare": True,
+        "allow_training_workbench": True,
+        "allow_live_training": True,
+    },
+}
+
+
+def normalize_plan_tier(value: str, *, default: str = PLAN_FREE) -> str:
+    tier = str(value or "").strip().lower()
+    if tier in PLAN_TIERS:
+        return tier
+    return default
+
+
+def plan_entitlements(tier: str) -> Dict[str, Any]:
+    key = normalize_plan_tier(tier, default=PLAN_FREE)
+    return dict(PLAN_ENTITLEMENTS[key])
+
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -49,13 +106,15 @@ def _hash_value(secret_key: str, value: str) -> str:
 class BillingConfig:
     stripe_secret_key: str
     stripe_webhook_secret: str
-    stripe_price_id: str
+    stripe_price_id_pro: str
+    stripe_price_id_elite: str
     session_ttl_seconds: int
     login_code_ttl_seconds: int
     login_code_cooldown_seconds: int
     mailgun_api_key: str
     mailgun_domain: str
     mailgun_from_email: str
+    allow_free_tier: bool
     expose_login_codes: bool
 
 
@@ -82,11 +141,18 @@ class BillingStore:
                     stripe_customer_id TEXT UNIQUE,
                     stripe_subscription_id TEXT UNIQUE,
                     status TEXT NOT NULL,
+                    plan_tier TEXT NOT NULL DEFAULT 'free',
                     current_period_end INTEGER,
                     updated_at TEXT NOT NULL,
                     raw_json TEXT NOT NULL
                 )
                 """
+            )
+            self._ensure_column(
+                conn,
+                table="subscriptions",
+                column="plan_tier",
+                definition="TEXT NOT NULL DEFAULT 'free'",
             )
             conn.execute(
                 """
@@ -124,6 +190,20 @@ class BillingStore:
                 """
             )
 
+    @staticmethod
+    def _ensure_column(
+        conn: sqlite3.Connection,
+        *,
+        table: str,
+        column: str,
+        definition: str,
+    ) -> None:
+        rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+        present = {str(row["name"]).strip().lower() for row in rows}
+        if column.lower() in present:
+            return
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
     def purge_expired(self) -> None:
         now = int(time.time())
         with self._connect() as conn:
@@ -137,10 +217,12 @@ class BillingStore:
         stripe_customer_id: Optional[str],
         stripe_subscription_id: Optional[str],
         status: str,
+        plan_tier: str,
         current_period_end: Optional[int],
         raw_payload: Dict[str, Any],
     ) -> None:
         normalized = normalize_email(email)
+        resolved_plan = normalize_plan_tier(plan_tier, default=PLAN_FREE)
         with self._connect() as conn:
             conn.execute(
                 """
@@ -149,15 +231,17 @@ class BillingStore:
                     stripe_customer_id,
                     stripe_subscription_id,
                     status,
+                    plan_tier,
                     current_period_end,
                     updated_at,
                     raw_json
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(email) DO UPDATE SET
                     stripe_customer_id = excluded.stripe_customer_id,
                     stripe_subscription_id = excluded.stripe_subscription_id,
                     status = excluded.status,
+                    plan_tier = excluded.plan_tier,
                     current_period_end = excluded.current_period_end,
                     updated_at = excluded.updated_at,
                     raw_json = excluded.raw_json
@@ -167,6 +251,7 @@ class BillingStore:
                     stripe_customer_id or None,
                     stripe_subscription_id or None,
                     str(status or "").strip().lower() or "incomplete",
+                    resolved_plan,
                     int(current_period_end) if current_period_end else None,
                     _utc_now_iso(),
                     json.dumps(raw_payload or {}, separators=(",", ":")),
@@ -183,6 +268,7 @@ class BillingStore:
                     stripe_customer_id,
                     stripe_subscription_id,
                     status,
+                    plan_tier,
                     current_period_end,
                     updated_at
                 FROM subscriptions
@@ -197,6 +283,7 @@ class BillingStore:
             "stripe_customer_id": row["stripe_customer_id"],
             "stripe_subscription_id": row["stripe_subscription_id"],
             "status": row["status"],
+            "plan_tier": normalize_plan_tier(row["plan_tier"], default=PLAN_FREE),
             "current_period_end": row["current_period_end"],
             "updated_at": row["updated_at"],
         }
@@ -219,6 +306,9 @@ class BillingStore:
         if not info:
             return False
         status = str(info.get("status") or "").lower()
+        plan_tier = normalize_plan_tier(str(info.get("plan_tier") or PLAN_FREE))
+        if status == "free" and plan_tier == PLAN_FREE:
+            return True
         if status not in ACTIVE_SUBSCRIPTION_STATUSES:
             return False
         period_end = info.get("current_period_end")
@@ -456,7 +546,31 @@ class BillingService:
 
     @property
     def enabled(self) -> bool:
-        return bool(stripe is not None and self.config.stripe_secret_key and self.config.stripe_price_id)
+        return bool(stripe is not None and self.config.stripe_secret_key and self.checkout_enabled_tiers())
+
+    def checkout_enabled_tiers(self) -> list[str]:
+        enabled: list[str] = []
+        if str(self.config.stripe_price_id_pro or "").strip():
+            enabled.append(PLAN_PRO)
+        if str(self.config.stripe_price_id_elite or "").strip():
+            enabled.append(PLAN_ELITE)
+        return enabled
+
+    def _price_id_for_tier(self, tier: str) -> str:
+        normalized_tier = normalize_plan_tier(tier, default=PLAN_PRO)
+        if normalized_tier == PLAN_ELITE:
+            return str(self.config.stripe_price_id_elite or "").strip()
+        return str(self.config.stripe_price_id_pro or "").strip()
+
+    def _plan_tier_for_price_id(self, price_id: str) -> str:
+        candidate = str(price_id or "").strip()
+        if not candidate:
+            return PLAN_PRO
+        if candidate == str(self.config.stripe_price_id_elite or "").strip():
+            return PLAN_ELITE
+        if candidate == str(self.config.stripe_price_id_pro or "").strip():
+            return PLAN_PRO
+        return PLAN_PRO
 
     def _require_enabled(self) -> None:
         if not self.enabled:
@@ -470,17 +584,24 @@ class BillingService:
         email: str,
         success_url: str,
         cancel_url: str,
+        plan_tier: str = PLAN_PRO,
     ) -> Dict[str, str]:
         self._require_enabled()
         normalized = normalize_email(email)
+        selected_tier = normalize_plan_tier(plan_tier, default=PLAN_PRO)
+        if selected_tier not in PAID_PLAN_TIERS:
+            raise ValueError("Use email login for the free tier")
+        price_id = self._price_id_for_tier(selected_tier)
+        if not price_id:
+            raise ValueError(f"Checkout is not configured for plan: {selected_tier}")
         kwargs: Dict[str, Any] = {
             "mode": "subscription",
-            "line_items": [{"price": self.config.stripe_price_id, "quantity": 1}],
+            "line_items": [{"price": price_id, "quantity": 1}],
             "success_url": success_url,
             "cancel_url": cancel_url,
             "allow_promotion_codes": True,
             "billing_address_collection": "auto",
-            "metadata": {"product": "poker-trainer"},
+            "metadata": {"product": "poker-trainer", "plan_tier": selected_tier},
         }
         known = self.store.subscription_for_email(normalized)
         known_customer = (known or {}).get("stripe_customer_id")
@@ -490,7 +611,7 @@ class BillingService:
             kwargs["customer_email"] = normalized
 
         session = stripe.checkout.Session.create(**kwargs)
-        return {"id": str(session["id"]), "url": str(session["url"])}
+        return {"id": str(session["id"]), "url": str(session["url"]), "plan_tier": selected_tier}
 
     @staticmethod
     def _to_dict(value: Any) -> Dict[str, Any]:
@@ -531,11 +652,28 @@ class BillingService:
         period_end_raw = sub.get("current_period_end")
         period_end = int(period_end_raw) if period_end_raw else None
         sub_id = str(sub.get("id") or "").strip() or None
+
+        metadata = sub.get("metadata") if isinstance(sub.get("metadata"), dict) else {}
+        plan_tier = normalize_plan_tier(str((metadata or {}).get("plan_tier") or ""), default=PLAN_PRO)
+        if plan_tier == PLAN_FREE:
+            plan_tier = PLAN_PRO
+        if not metadata or "plan_tier" not in metadata:
+            items = sub.get("items")
+            data_rows = []
+            if isinstance(items, dict):
+                data_rows = items.get("data") if isinstance(items.get("data"), list) else []
+            if data_rows:
+                first = data_rows[0] if isinstance(data_rows[0], dict) else {}
+                price_obj = first.get("price") if isinstance(first, dict) else {}
+                price_id = str((price_obj or {}).get("id") or "").strip() if isinstance(price_obj, dict) else ""
+                plan_tier = self._plan_tier_for_price_id(price_id)
+
         self.store.upsert_subscription(
             email=email,
             stripe_customer_id=customer_id,
             stripe_subscription_id=sub_id,
             status=status,
+            plan_tier=plan_tier,
             current_period_end=period_end,
             raw_payload=sub,
         )
@@ -544,6 +682,7 @@ class BillingService:
         return {
             "email": email,
             "status": status,
+            "plan_tier": plan_tier,
             "stripe_customer_id": customer_id,
             "stripe_subscription_id": sub_id,
             "current_period_end": period_end,
@@ -620,8 +759,7 @@ class BillingService:
 
     def request_login_code(self, email: str) -> Dict[str, Any]:
         normalized = normalize_email(email)
-        if not self.store.subscription_active(normalized):
-            raise PermissionError("No active subscription found for this email")
+        plan = self._ensure_access_plan(normalized)
         code = self.store.create_login_code(
             normalized,
             ttl_seconds=self.config.login_code_ttl_seconds,
@@ -631,6 +769,7 @@ class BillingService:
         response: Dict[str, Any] = {
             "ok": True,
             "expires_in_seconds": int(self.config.login_code_ttl_seconds),
+            "plan_tier": str(plan.get("tier") or PLAN_FREE),
         }
         if self.mailgun.configured:
             ttl_minutes = max(1, int(self.config.login_code_ttl_seconds / 60))
@@ -645,8 +784,7 @@ class BillingService:
 
     def verify_login_code(self, email: str, code: str) -> str:
         normalized = normalize_email(email)
-        if not self.store.subscription_active(normalized):
-            raise PermissionError("Subscription is inactive")
+        self._ensure_access_plan(normalized)
         ok = self.store.verify_login_code(normalized, str(code or "").strip())
         if not ok:
             raise PermissionError("Invalid or expired login code")
@@ -657,8 +795,7 @@ class BillingService:
 
     def create_session_for_email(self, email: str) -> str:
         normalized = normalize_email(email)
-        if not self.store.subscription_active(normalized):
-            raise PermissionError("Subscription is inactive")
+        self._ensure_access_plan(normalized)
         return self.store.create_session(
             normalized,
             ttl_seconds=self.config.session_ttl_seconds,
@@ -668,7 +805,8 @@ class BillingService:
         email = self.store.session_email(token)
         if not email:
             return None
-        if not self.store.subscription_active(email):
+        plan = self.account_plan(email)
+        if not plan.get("active"):
             self.store.revoke_session(token)
             return None
         return email
@@ -689,3 +827,66 @@ class BillingService:
             return_url=return_url,
         )
         return {"url": str(portal["url"])}
+
+    def _ensure_access_plan(self, email: str) -> Dict[str, Any]:
+        normalized = normalize_email(email)
+        if self.store.subscription_active(normalized):
+            return self.account_plan(normalized)
+        if not self.config.allow_free_tier:
+            raise PermissionError("No active subscription found for this email")
+        existing = self.store.subscription_for_email(normalized) or {}
+        self.store.upsert_subscription(
+            email=normalized,
+            stripe_customer_id=existing.get("stripe_customer_id"),
+            stripe_subscription_id=None,
+            status="free",
+            plan_tier=PLAN_FREE,
+            current_period_end=None,
+            raw_payload={
+                "source": "free-tier",
+                "previous_status": existing.get("status"),
+                "upgraded_at": _utc_now_iso(),
+            },
+        )
+        return self.account_plan(normalized)
+
+    def account_plan(self, email: str | None) -> Dict[str, Any]:
+        normalized = normalize_email(email) if email else ""
+        info = self.store.subscription_for_email(normalized) if normalized else None
+
+        if not info:
+            tier = PLAN_FREE
+            status = "free"
+            active = bool(self.config.allow_free_tier)
+        else:
+            status = str(info.get("status") or "free").strip().lower() or "free"
+            stored_tier = normalize_plan_tier(str(info.get("plan_tier") or ""), default=PLAN_FREE)
+            if status in ACTIVE_SUBSCRIPTION_STATUSES:
+                tier = stored_tier if stored_tier in PAID_PLAN_TIERS else PLAN_PRO
+            elif status == "free":
+                tier = PLAN_FREE
+            elif self.config.allow_free_tier:
+                tier = PLAN_FREE
+                status = "free"
+            else:
+                tier = stored_tier
+            active = self.store.subscription_active(normalized)
+            if not active and self.config.allow_free_tier and tier == PLAN_FREE:
+                active = True
+
+        entitlements = plan_entitlements(tier)
+        entitlements["status"] = status
+        entitlements["active"] = bool(active)
+        entitlements["paid"] = tier in PAID_PLAN_TIERS
+        entitlements["email"] = normalized or None
+        return entitlements
+
+    def plan_catalog(self) -> list[dict]:
+        paid_available = set(self.checkout_enabled_tiers())
+        catalog: list[dict] = []
+        for tier in [PLAN_FREE, PLAN_PRO, PLAN_ELITE]:
+            row = plan_entitlements(tier)
+            row["checkout_enabled"] = tier in paid_available
+            row["paid"] = tier in PAID_PLAN_TIERS
+            catalog.append(row)
+        return catalog

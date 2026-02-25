@@ -4,6 +4,8 @@ const PLAY_MODE_KEY = "trainer:playModeV1";
 
 const state = {
   config: null,
+  auth: null,
+  plan: null,
   playMode: "full_match",
   session: null,
   liveSelectedAction: null,
@@ -15,6 +17,8 @@ const state = {
   drillSelectedAction: null,
   drillSelectedSize: null,
   drillSelectedIntent: "value",
+  analyzedProfile: null,
+  comparedProfiles: [],
 };
 
 const els = {};
@@ -29,28 +33,68 @@ function mapIds(ids) {
   });
 }
 
+function currentPlan() {
+  return state.plan || {};
+}
+
+function featureEnabled(key) {
+  return !!currentPlan()[key];
+}
+
+function maxAliasesPerProfile() {
+  return Number(currentPlan().max_aliases_per_profile || 12);
+}
+
+function maxCompareGroups() {
+  return Number(currentPlan().max_compare_groups || 1);
+}
+
+function renderPlanBadge() {
+  if (!els.planBadge) return;
+  const plan = currentPlan();
+  const label = String(plan.label || "Free");
+  const tier = String(plan.tier || "free").toUpperCase();
+  const handLimit = Number(plan.max_upload_hands || 500);
+  const exploitText = plan.show_exploits ? "Exploit reports: on" : "Exploit reports: off";
+  els.planBadge.textContent = `Plan: ${label} (${tier}) | Upload cap: ${handLimit} total hands | ${exploitText}`;
+}
+
+function renderFeatureLockNotice() {
+  if (!els.featureLockNotice) return;
+  if (featureEnabled("allow_live_training")) {
+    els.featureLockNotice.style.display = "none";
+    els.featureLockNotice.textContent = "";
+    return;
+  }
+  els.featureLockNotice.style.display = "block";
+  els.featureLockNotice.textContent =
+    "Live play and single-hand drills are Elite features. Free/Pro can upload hands, profile players, and run analysis.";
+}
+
 async function bootstrap() {
   mapIds([
+    "planBadge",
+    "featureLockNotice",
+    "modeToggleRow",
     "playModeFull",
     "playModeDrill",
-    "opponentSource",
-    "presetKey",
-    "analyzerPlayer",
+    "handsFiles",
+    "uploadHandsBtn",
+    "refreshPlayersBtn",
+    "analyzerPlayers",
+    "analyzeProfileBtn",
+    "compareProfilesBtn",
+    "compareConfig",
+    "compareGroupA",
+    "compareGroupB",
+    "comparisonPanel",
+    "comparisonDashboard",
+    "profileDashboard",
+    "trainingStyleWrap",
+    "trainingStyle",
+    "handsStatus",
     "startingStackBb",
     "liveSeed",
-    "customName",
-    "cVpip",
-    "cPfr",
-    "c3bet",
-    "cF3b",
-    "cLimp",
-    "cAf",
-    "cFlopCbet",
-    "cTurnCbet",
-    "cRiverCbet",
-    "cWtsd",
-    "cWsd",
-    "cXr",
     "targetedMode",
     "targetedModeWrap",
     "useSetupDraft",
@@ -69,6 +113,7 @@ async function bootstrap() {
     "fullModePanel",
     "drillModePanel",
     "liveMeta",
+    "balanceTracker",
     "liveTable",
     "liveActions",
     "drillMeta",
@@ -82,10 +127,30 @@ async function bootstrap() {
     "statusLine",
   ]);
 
+  state.auth = await apiGet("/api/auth/status");
+  state.plan = state.auth?.plan || {
+    tier: "free",
+    label: "Free",
+    max_upload_hands: 500,
+    max_aliases_per_profile: 12,
+    max_compare_groups: 1,
+    show_exploits: false,
+    allow_multi_profile_compare: false,
+    allow_live_training: false,
+  };
+
   const config = await apiGet("/api/config");
   state.config = config;
   initControls(config);
   bindEvents();
+  renderPlanBadge();
+  renderFeatureLockNotice();
+  applyPlanLocks();
+  try {
+    await refreshHandsPlayers(false);
+  } catch {
+    // Keep booting; user can retry refresh/upload manually.
+  }
 
   const savedMode = localStorage.getItem(PLAY_MODE_KEY);
   if (savedMode === "single_hand_drill") {
@@ -95,7 +160,7 @@ async function bootstrap() {
   }
 
   const existing = localStorage.getItem(LIVE_SESSION_KEY);
-  if (existing) {
+  if (existing && featureEnabled("allow_live_training")) {
     try {
       const restored = await apiGet(`/api/live/state?session_id=${encodeURIComponent(existing)}`);
       renderLiveState(restored);
@@ -105,10 +170,14 @@ async function bootstrap() {
     } catch {
       localStorage.removeItem(LIVE_SESSION_KEY);
     }
+  } else if (!featureEnabled("allow_live_training")) {
+    localStorage.removeItem(LIVE_SESSION_KEY);
   }
 
-  if (!state.session && state.playMode === "full_match") {
-    setStatus("Ready. Start a full match to play against profile.");
+  if (!featureEnabled("allow_live_training")) {
+    setStatus("Ready. Upload hands and analyze profiles. Live training is an Elite feature.");
+  } else if (!state.session && state.playMode === "full_match") {
+    setStatus("Ready. Upload hand files and select friend usernames for full match mode.");
   }
   if (!state.drillScenario && state.playMode === "single_hand_drill") {
     setStatus("Ready. Start a single-hand drill for full EV feedback.");
@@ -116,17 +185,9 @@ async function bootstrap() {
 }
 
 function initControls(config) {
-  const presets = config.live?.presets || [];
-  fillSelect(
-    els.presetKey,
-    presets.map((p) => ({ value: p.key, label: `${p.name} (${p.style_label})` })),
-  );
-
-  const players = config.live?.analyzer_players || [];
-  fillSelect(
-    els.analyzerPlayer,
-    players.map((name) => ({ value: name, label: name.toUpperCase() })),
-  );
+  const handsStatus = config.live?.hands_status || { players: [], total_files: 0, uploaded_files: [] };
+  fillAnalyzerPlayerSelect(handsStatus.players || [], false);
+  renderHandsStatus(handsStatus);
 
   fillSelect(els.tStreet, config.streets.map((v) => ({ value: v, label: titleCase(v) })));
   fillSelect(
@@ -138,10 +199,15 @@ function initControls(config) {
     config.action_contexts.map((v) => ({ value: v, label: titleCase(v.replaceAll("_", " ")) })),
   );
   fillSelect(els.tHeroPosition, ["BTN", "BB"].map((v) => ({ value: v, label: v })));
+  fillSelect(
+    els.trainingStyle,
+    [
+      { value: "balanced_default", label: "Balanced (Optimal Baseline)" },
+      ...(config.archetypes || []).map((a) => ({ value: a.key, label: `${a.label} Training` })),
+    ],
+  );
 
   const defaults = config.live?.defaults || {};
-  els.opponentSource.value = defaults.opponent_source || "preset";
-  els.presetKey.value = defaults.preset_key || "charlie";
   els.startingStackBb.value = Number(defaults.starting_stack_bb || 100);
   els.targetedMode.checked = !!defaults.targeted_mode;
 
@@ -153,45 +219,75 @@ function initControls(config) {
     els.tHeroPosition.value = t.hero_position;
   }
 
-  const charlie = presets.find((p) => p.key === "charlie") || presets[0];
-  if (charlie) {
-    populateCustomFromProfile(charlie);
-  }
-
-  updateOpponentSourceUi();
   updateTargetModeUi();
 }
 
+function applyPlanLocks() {
+  const liveAllowed = featureEnabled("allow_live_training");
+  const compareAllowed = featureEnabled("allow_multi_profile_compare");
+
+  if (els.modeToggleRow) els.modeToggleRow.style.display = liveAllowed ? "flex" : "none";
+  if (els.targetedModeWrap) els.targetedModeWrap.style.display = liveAllowed ? "inline-flex" : "none";
+  if (els.useSetupDraftWrap) els.useSetupDraftWrap.style.display = liveAllowed ? "inline-flex" : "none";
+  if (els.targetConfigWrap) els.targetConfigWrap.style.display = liveAllowed ? "block" : "none";
+  if (els.fullModeActions) els.fullModeActions.style.display = liveAllowed ? "flex" : "none";
+  if (els.drillModeActions) els.drillModeActions.style.display = "none";
+  if (els.fullModePanel) els.fullModePanel.style.display = liveAllowed ? "block" : "none";
+  if (els.drillModePanel) els.drillModePanel.style.display = "none";
+  if (els.trainingStyleWrap) els.trainingStyleWrap.style.display = liveAllowed ? "flex" : "none";
+  if (!liveAllowed) {
+    state.playMode = "full_match";
+    if (els.playModeFull) els.playModeFull.checked = true;
+    if (els.playModeDrill) els.playModeDrill.checked = false;
+  }
+
+  if (els.compareProfilesBtn) {
+    els.compareProfilesBtn.style.display = compareAllowed ? "inline-flex" : "none";
+  }
+  if (els.compareConfig) {
+    els.compareConfig.style.display = compareAllowed ? "block" : "none";
+  }
+  if (els.comparisonPanel) {
+    els.comparisonPanel.style.display = compareAllowed ? "block" : "none";
+  }
+}
+
 function bindEvents() {
-  if (els.playModeFull) {
+  if (els.playModeFull && featureEnabled("allow_live_training")) {
     els.playModeFull.addEventListener("change", () => {
       if (els.playModeFull.checked) setPlayMode("full_match");
     });
   }
-  if (els.playModeDrill) {
+  if (els.playModeDrill && featureEnabled("allow_live_training")) {
     els.playModeDrill.addEventListener("change", () => {
       if (els.playModeDrill.checked) setPlayMode("single_hand_drill");
     });
   }
 
-  els.opponentSource.addEventListener("change", updateOpponentSourceUi);
   els.targetedMode.addEventListener("change", updateTargetModeUi);
+  els.uploadHandsBtn.addEventListener("click", uploadHandsFiles);
+  els.refreshPlayersBtn.addEventListener("click", () => {
+    refreshHandsPlayers().catch((err) => setStatus(`Could not refresh players: ${err.message}`, true));
+  });
+  els.analyzeProfileBtn.addEventListener("click", analyzeSelectedProfile);
+  if (els.compareProfilesBtn) {
+    els.compareProfilesBtn.addEventListener("click", compareProfileGroups);
+  }
 
   els.startLiveBtn.addEventListener("click", startLiveMatch);
   els.nextHandBtn.addEventListener("click", nextHand);
   els.startDrillBtn.addEventListener("click", startDrillHand);
   els.newDrillBtn.addEventListener("click", startDrillHand);
-
-  els.presetKey.addEventListener("change", () => {
-    const presets = state.config.live?.presets || [];
-    const selected = presets.find((p) => p.key === els.presetKey.value);
-    if (selected && els.opponentSource.value === "preset") {
-      populateCustomFromProfile(selected);
-    }
-  });
 }
 
 function setPlayMode(mode) {
+  if (!featureEnabled("allow_live_training")) {
+    state.playMode = "full_match";
+    if (els.playModeFull) els.playModeFull.checked = true;
+    if (els.playModeDrill) els.playModeDrill.checked = false;
+    updateModeUi();
+    return;
+  }
   state.playMode = mode === "single_hand_drill" ? "single_hand_drill" : "full_match";
   if (els.playModeFull) els.playModeFull.checked = state.playMode === "full_match";
   if (els.playModeDrill) els.playModeDrill.checked = state.playMode === "single_hand_drill";
@@ -200,6 +296,13 @@ function setPlayMode(mode) {
 }
 
 function updateModeUi() {
+  if (!featureEnabled("allow_live_training")) {
+    if (els.fullModeActions) els.fullModeActions.style.display = "none";
+    if (els.drillModeActions) els.drillModeActions.style.display = "none";
+    if (els.fullModePanel) els.fullModePanel.style.display = "none";
+    if (els.drillModePanel) els.drillModePanel.style.display = "none";
+    return;
+  }
   const full = state.playMode === "full_match";
 
   if (els.fullModeActions) els.fullModeActions.style.display = full ? "flex" : "none";
@@ -217,7 +320,7 @@ function updateModeUi() {
       renderLiveOpponentSummary(state.session.match?.opponent || {}, state.session.hand || {});
     } else {
       els.opponentSummary.textContent = "Opponent summary appears after match start.";
-      setStatus("Full Match mode selected. Start a match to play a full heads-up hand flow.");
+      setStatus("Full Match mode selected. Upload hands and select friend usernames to start.");
     }
   } else {
     if (state.drillOpponentProfile) {
@@ -227,31 +330,6 @@ function updateModeUi() {
       setStatus("Single Hand Drill mode selected. Generate a hand for EV and leak feedback.");
     }
   }
-}
-
-function updateOpponentSourceUi() {
-  const source = els.opponentSource.value;
-  els.presetKey.disabled = source !== "preset";
-  els.analyzerPlayer.disabled = source !== "analyzer";
-
-  const customDisabled = source !== "custom";
-  [
-    "customName",
-    "cVpip",
-    "cPfr",
-    "c3bet",
-    "cF3b",
-    "cLimp",
-    "cAf",
-    "cFlopCbet",
-    "cTurnCbet",
-    "cRiverCbet",
-    "cWtsd",
-    "cWsd",
-    "cXr",
-  ].forEach((id) => {
-    if (els[id]) els[id].disabled = customDisabled;
-  });
 }
 
 function updateTargetModeUi() {
@@ -268,49 +346,8 @@ function parseNumber(id, fallback) {
   return value;
 }
 
-function asRatePercent(value) {
-  return Number(value) / 100;
-}
-
 function normalizeHeadsUpPosition(value) {
   return value === "BB" ? "BB" : "BTN";
-}
-
-function buildCustomProfile() {
-  return {
-    name: String(els.customName.value || "CUSTOM OPPONENT").trim() || "CUSTOM OPPONENT",
-    source: "custom",
-    style_label: "Custom",
-    vpip: asRatePercent(parseNumber("cVpip", 30)),
-    pfr: asRatePercent(parseNumber("cPfr", 20)),
-    three_bet: asRatePercent(parseNumber("c3bet", 8)),
-    fold_to_3bet: asRatePercent(parseNumber("cF3b", 45)),
-    limp_rate: asRatePercent(parseNumber("cLimp", 12)),
-    af: parseNumber("cAf", 2.2),
-    flop_cbet: asRatePercent(parseNumber("cFlopCbet", 58)),
-    turn_cbet: asRatePercent(parseNumber("cTurnCbet", 44)),
-    river_cbet: asRatePercent(parseNumber("cRiverCbet", 32)),
-    wtsd: asRatePercent(parseNumber("cWtsd", 30)),
-    w_sd: asRatePercent(parseNumber("cWsd", 51)),
-    check_raise: asRatePercent(parseNumber("cXr", 9)),
-  };
-}
-
-function populateCustomFromProfile(profile) {
-  if (!profile) return;
-  els.customName.value = profile.name || "CUSTOM OPPONENT";
-  els.cVpip.value = Number((profile.vpip || 0) * 100).toFixed(1);
-  els.cPfr.value = Number((profile.pfr || 0) * 100).toFixed(1);
-  els.c3bet.value = Number((profile.three_bet || 0) * 100).toFixed(1);
-  els.cF3b.value = Number((profile.fold_to_3bet || 0) * 100).toFixed(1);
-  els.cLimp.value = Number((profile.limp_rate || 0) * 100).toFixed(1);
-  els.cAf.value = Number(profile.af || 2.2).toFixed(2);
-  els.cFlopCbet.value = Number((profile.flop_cbet || 0) * 100).toFixed(1);
-  els.cTurnCbet.value = Number((profile.turn_cbet || 0) * 100).toFixed(1);
-  els.cRiverCbet.value = Number((profile.river_cbet || 0) * 100).toFixed(1);
-  els.cWtsd.value = Number((profile.wtsd || 0) * 100).toFixed(1);
-  els.cWsd.value = Number((profile.w_sd || 0) * 100).toFixed(1);
-  els.cXr.value = Number((profile.check_raise || 0) * 100).toFixed(1);
 }
 
 function buildTargetConfig(force = false) {
@@ -348,24 +385,204 @@ function loadSetupDraft() {
   }
 }
 
-function getPresetProfileByKey(key) {
-  const presets = state.config?.live?.presets || [];
-  return presets.find((p) => p.key === key) || presets.find((p) => p.key === "charlie") || presets[0] || null;
+function fillAnalyzerPlayerSelect(players, preserveSelection = true) {
+  const previouslySelected = preserveSelection ? new Set(getSelectedAnalyzerPlayers()) : new Set();
+  const options = (players || [])
+    .map((row) => {
+      const username = String(row.username || "").trim();
+      if (!username) return "";
+      const handsSeen = Number(row.hands_seen || 0);
+      const ids = Array.isArray(row.player_ids) ? row.player_ids.length : 0;
+      const label = `${username.toUpperCase()} (${handsSeen} hands, ${ids} id${ids === 1 ? "" : "s"})`;
+      const selected = previouslySelected.has(username) ? " selected" : "";
+      return `<option value="${escapeHtml(username)}"${selected}>${escapeHtml(label)}</option>`;
+    })
+    .filter(Boolean)
+    .join("");
+  els.analyzerPlayers.innerHTML = options;
+  if (!els.analyzerPlayers.selectedOptions.length && els.analyzerPlayers.options.length > 0) {
+    els.analyzerPlayers.options[0].selected = true;
+  }
+}
+
+function getSelectedAnalyzerPlayers() {
+  return Array.from(els.analyzerPlayers?.selectedOptions || [])
+    .map((opt) => String(opt.value || "").trim())
+    .filter(Boolean);
+}
+
+function renderHandsStatus(status) {
+  const files = Array.isArray(status?.uploaded_files) ? status.uploaded_files : [];
+  const totalFiles = Number(status?.total_files || files.length || 0);
+  const totalPlayers = Number(status?.total_players || 0);
+  const totalHands = Number(status?.total_hands || 0);
+  if (!totalFiles) {
+    els.handsStatus.textContent = "No uploaded files yet. Upload one or more PokerNow JSON files to build friend profiles.";
+    return;
+  }
+  const recent = files.slice(-4).join(", ");
+  els.handsStatus.textContent =
+    `Uploaded files: ${totalFiles} | Players found: ${totalPlayers} | Hands parsed: ${totalHands}` +
+    (recent ? ` | Recent: ${recent}` : "");
+}
+
+async function refreshHandsPlayers(showStatus = true) {
+  const status = await apiGet("/api/hands/players");
+  fillAnalyzerPlayerSelect(status.players || [], true);
+  renderHandsStatus(status);
+  if (showStatus) {
+    setStatus(`Loaded ${Number(status.total_players || 0)} usernames from ${Number(status.total_files || 0)} file(s).`);
+  }
+  return status;
+}
+
+async function uploadHandsFiles() {
+  const files = Array.from(els.handsFiles?.files || []);
+  if (!files.length) {
+    setStatus("Choose one or more JSON files first.", true);
+    return;
+  }
+  const form = new FormData();
+  files.forEach((file) => form.append("files", file, file.name));
+  try {
+    setStatus(`Uploading ${files.length} file(s)...`);
+    const status = await apiUpload("/api/hands/upload", form);
+    fillAnalyzerPlayerSelect(status.players || [], false);
+    renderHandsStatus(status);
+    if (els.handsFiles) els.handsFiles.value = "";
+    setStatus(`Upload complete. Found ${Number(status.total_players || 0)} usernames.`);
+  } catch (err) {
+    setStatus(`Upload failed: ${err.message}`, true);
+  }
 }
 
 async function resolveOpponentProfile() {
-  const source = els.opponentSource.value;
-  if (source === "custom") {
-    return buildCustomProfile();
+  const names = getSelectedAnalyzerPlayers();
+  if (!names.length) {
+    throw new Error("Select at least one friend username");
   }
-  if (source === "analyzer") {
-    const name = String(els.analyzerPlayer.value || "").trim();
-    if (!name) throw new Error("Select an analyzer player first");
-    return apiGet(`/api/opponent_profile?name=${encodeURIComponent(name)}`);
+  const aliasLimit = maxAliasesPerProfile();
+  if (names.length > aliasLimit) {
+    throw new Error(`Your plan allows up to ${aliasLimit} aliases per profile.`);
   }
-  const preset = getPresetProfileByKey(els.presetKey.value);
-  if (!preset) throw new Error("No preset profiles available");
-  return preset;
+  return apiGet(`/api/opponent_profile?name=${encodeURIComponent(names.join(","))}`);
+}
+
+function parseAliasInput(value) {
+  return String(value || "")
+    .split(",")
+    .map((token) => token.trim())
+    .filter(Boolean);
+}
+
+function profileStatsPills(profile) {
+  return `
+    <div class="stat-pill-row">
+      <span class="stat-pill">Hands: ${profile.hands_analyzed || 0}</span>
+      <span class="stat-pill">VPIP/PFR: ${pct(profile.vpip)} / ${pct(profile.pfr)}</span>
+      <span class="stat-pill">3B/Fold3B: ${pct(profile.three_bet)} / ${pct(profile.fold_to_3bet)}</span>
+      <span class="stat-pill">AF: ${Number(profile.af || 0).toFixed(2)}</span>
+      <span class="stat-pill">WTSD/W$SD: ${pct(profile.wtsd)} / ${pct(profile.w_sd)}</span>
+      <span class="stat-pill">Style: ${escapeHtml(profile.style_label || "Unknown")}</span>
+    </div>
+  `;
+}
+
+function renderSingleProfileDashboard(profile) {
+  if (!els.profileDashboard) return;
+  const tendencies = (profile.tendencies || [])
+    .slice(0, 8)
+    .map((t) => `<li>${escapeHtml(t)}</li>`)
+    .join("");
+  const exploits = (profile.exploits || [])
+    .slice(0, 6)
+    .map(
+      (e) =>
+        `<li><strong>[${escapeHtml((e.category || "").toUpperCase())}]</strong> ${escapeHtml(e.description || "")} -> ${escapeHtml(e.counter_strategy || "")}</li>`,
+    )
+    .join("");
+
+  const exploitBlock = featureEnabled("show_exploits")
+    ? `<div style="margin-top:8px;"><strong>Exploit Plan</strong><ul class="leak-note-list">${exploits || "<li>No exploit notes.</li>"}</ul></div>`
+    : `<div class="meta-strip">Free tier hides exploit plans. Upgrade to Pro to unlock them.</div>`;
+
+  els.profileDashboard.innerHTML = `
+    <div><strong>${escapeHtml(profile.name || "Profile")}</strong></div>
+    ${profileStatsPills(profile)}
+    <div style="margin-top:8px;"><strong>Tendencies</strong><ul class="leak-note-list">${tendencies || "<li>No tendency data.</li>"}</ul></div>
+    ${exploitBlock}
+  `;
+}
+
+function renderComparisonDashboard(profiles) {
+  if (!els.comparisonDashboard) return;
+  if (!profiles.length) {
+    els.comparisonDashboard.textContent = "No comparison results yet.";
+    return;
+  }
+  const cards = profiles
+    .map((profile) => {
+      const exploits = (profile.exploits || [])
+        .slice(0, 4)
+        .map((e) => `<li>${escapeHtml(e.description || "")}</li>`)
+        .join("");
+      return `
+        <div class="comparison-card">
+          <div><strong>${escapeHtml(profile.group_label || profile.name || "Player")}</strong></div>
+          ${profileStatsPills(profile)}
+          <div class="meta-strip">Aliases: ${escapeHtml((profile.selected_usernames || []).join(", ") || "n/a")}</div>
+          <div><strong>Top Exploits</strong><ul class="leak-note-list">${exploits || "<li>No exploit notes.</li>"}</ul></div>
+        </div>
+      `;
+    })
+    .join("");
+  els.comparisonDashboard.innerHTML = `<div class="comparison-grid">${cards}</div>`;
+}
+
+async function analyzeSelectedProfile() {
+  try {
+    setStatus("Building profile dashboard...");
+    const profile = await resolveOpponentProfile();
+    state.analyzedProfile = profile;
+    renderSingleProfileDashboard(profile);
+    setStatus("Profile analysis ready.");
+  } catch (err) {
+    setStatus(`Could not analyze profile: ${err.message}`, true);
+  }
+}
+
+async function compareProfileGroups() {
+  if (!featureEnabled("allow_multi_profile_compare")) {
+    setStatus("Upgrade to Pro to compare multiple profiles.", true);
+    return;
+  }
+  try {
+    const groupA = parseAliasInput(els.compareGroupA?.value);
+    const groupB = parseAliasInput(els.compareGroupB?.value);
+    const groups = [];
+    if (groupA.length) groups.push({ label: "Player Group A", usernames: groupA });
+    if (groupB.length) groups.push({ label: "Player Group B", usernames: groupB });
+    if (!groups.length) {
+      throw new Error("Enter aliases for at least one comparison group.");
+    }
+    const maxGroups = maxCompareGroups();
+    if (groups.length > maxGroups) {
+      throw new Error(`Your plan supports up to ${maxGroups} compare groups.`);
+    }
+    const aliasLimit = maxAliasesPerProfile();
+    for (const group of groups) {
+      if ((group.usernames || []).length > aliasLimit) {
+        throw new Error(`A group exceeds alias limit (${aliasLimit}).`);
+      }
+    }
+    setStatus("Comparing profile groups...");
+    const result = await apiPost("/api/opponent/compare", { groups });
+    state.comparedProfiles = result.profiles || [];
+    renderComparisonDashboard(state.comparedProfiles);
+    setStatus("Comparison ready.");
+  } catch (err) {
+    setStatus(`Could not compare groups: ${err.message}`, true);
+  }
 }
 
 function mapProfileToArchetype(profile) {
@@ -409,6 +626,29 @@ function mapProfileToArchetype(profile) {
   return best || { key: "tag_reg", label: "TAG Reg", score: 0 };
 }
 
+function heroProfileFromTrainingStyle(styleKey) {
+  const key = String(styleKey || "").trim();
+  if (!key || key === "balanced_default") {
+    return null;
+  }
+  const archetype = (state.config?.archetypes || []).find((row) => row.key === key);
+  if (!archetype) {
+    return null;
+  }
+  const pfr = Number(archetype.pfr || 0.22);
+  const vpip = Number(archetype.vpip || 0.3);
+  const af = Number(archetype.af || 2.8);
+  const threeBet = Math.min(0.28, Math.max(0.02, pfr * 0.42));
+  const foldToThreeBet = Math.min(0.82, Math.max(0.22, 0.58 - (pfr - 0.2) * 0.3));
+  return {
+    vpip,
+    pfr,
+    af,
+    three_bet: Number(threeBet.toFixed(3)),
+    fold_to_3bet: Number(foldToThreeBet.toFixed(3)),
+  };
+}
+
 function buildDrillPayload(profile, mapped) {
   const stackBb = parseNumber("startingStackBb", 100);
   const target = buildTargetConfig(true) || {
@@ -420,18 +660,6 @@ function buildDrillPayload(profile, mapped) {
 
   const heroPos = normalizeHeadsUpPosition(target.hero_position);
   const villainPos = heroPos === "BTN" ? "BB" : "BTN";
-  const draft = loadSetupDraft();
-  const defaultHero = state.config?.defaults?.hero_profile || {};
-
-  const heroProfile = {
-    vpip: Number(draft?.hero_profile?.vpip ?? Number(defaultHero.vpip || 0.3) * 100),
-    pfr: Number(draft?.hero_profile?.pfr ?? Number(defaultHero.pfr || 0.22) * 100),
-    af: Number(draft?.hero_profile?.af ?? Number(defaultHero.af || 2.8)),
-    three_bet: Number(draft?.hero_profile?.three_bet ?? Number(defaultHero.three_bet || 0.09) * 100),
-    fold_to_3bet: Number(
-      draft?.hero_profile?.fold_to_3bet ?? Number(defaultHero.fold_to_3bet || 0.54) * 100,
-    ),
-  };
 
   const payload = {
     num_players: 2,
@@ -444,9 +672,7 @@ function buildDrillPayload(profile, mapped) {
     default_stack_bb: stackBb,
     sb: 1,
     bb: 2,
-    randomize_hero_profile: !!draft?.randomize_hero_profile,
     randomize_archetypes: false,
-    hero_profile: heroProfile,
     seats: [
       {
         position: heroPos,
@@ -467,23 +693,31 @@ function buildDrillPayload(profile, mapped) {
   if (seedText) {
     payload.seed = Number(seedText);
   }
+  const trainingStyle = String(els.trainingStyle?.value || "balanced_default").trim();
+  const heroProfile = heroProfileFromTrainingStyle(trainingStyle);
+  if (heroProfile) {
+    payload.hero_profile = heroProfile;
+  }
   return payload;
 }
 
 async function startLiveMatch() {
+  if (!featureEnabled("allow_live_training")) {
+    setStatus("Upgrade to Elite to start live matches.", true);
+    return;
+  }
   try {
     setStatus("Starting live match...");
+    const selectedNames = getSelectedAnalyzerPlayers();
+    if (!selectedNames.length) {
+      throw new Error("Select at least one friend username before starting.");
+    }
     const payload = {
-      opponent_source: els.opponentSource.value,
-      preset_key: els.presetKey.value,
-      analyzer_player: els.analyzerPlayer.value,
+      analyzer_players: selectedNames,
       starting_stack_bb: parseNumber("startingStackBb", 100),
       targeted_mode: !!els.targetedMode.checked,
       target_config: buildTargetConfig(false),
     };
-    if (els.opponentSource.value === "custom") {
-      payload.opponent_profile = buildCustomProfile();
-    }
     const seedText = String(els.liveSeed.value || "").trim();
     if (seedText) payload.seed = Number(seedText);
 
@@ -497,6 +731,10 @@ async function startLiveMatch() {
 }
 
 async function nextHand() {
+  if (!featureEnabled("allow_live_training")) {
+    setStatus("Upgrade to Elite to use live hand progression.", true);
+    return;
+  }
   if (!state.session?.session_id) {
     setStatus("Start a match first.", true);
     return;
@@ -518,8 +756,9 @@ function renderLiveState(data) {
   const opponent = m.opponent || {};
 
   els.liveMeta.textContent =
-    `Session ${data.session_id} | Hands: ${m.hands_played || 0} | Net: ${(m.hero_net_bb || 0).toFixed(3)}bb | ` +
+    `Session ${data.session_id} | Hands: ${m.hands_played || 0} | Hero Net: ${(m.hero_net_bb || 0).toFixed(3)}bb | ` +
     `Mode: ${titleCase(String(m.mode || "full_game").replaceAll("_", " "))}`;
+  renderBalanceTracker(m, h);
 
   const boardCards = (h.board || []).map(cardNode).join("");
   const heroCards = (h.hero_hand || []).map(cardNode).join("");
@@ -550,6 +789,34 @@ function renderLiveState(data) {
   if (state.playMode === "full_match") {
     renderLiveOpponentSummary(opponent, h);
   }
+}
+
+function renderBalanceTracker(match, hand) {
+  if (!els.balanceTracker) return;
+  const heroNet = Number(match.hero_net_bb || 0);
+  const villainNet = Number(match.villain_net_bb !== undefined ? match.villain_net_bb : -heroNet);
+  const heroStack = Number(
+    match.hero_bankroll_bb !== undefined ? match.hero_bankroll_bb : Number(match.starting_stack_bb || 100) + heroNet,
+  );
+  const villainStack = Number(
+    match.villain_bankroll_bb !== undefined
+      ? match.villain_bankroll_bb
+      : Number(match.starting_stack_bb || 100) + villainNet,
+  );
+  const handDelta = Number(hand?.hero_delta_bb || 0);
+  const handLabel = hand?.hand_over ? `${handDelta >= 0 ? "+" : ""}${handDelta.toFixed(2)}bb` : "in progress";
+
+  els.balanceTracker.innerHTML = `
+    <div class="table-headline">
+      <span><strong>Hero Stack:</strong> ${heroStack.toFixed(2)}bb</span>
+      <span><strong>Villain Stack:</strong> ${villainStack.toFixed(2)}bb</span>
+      <span><strong>Last Hand:</strong> ${handLabel}</span>
+    </div>
+    <div class="stat-pill-row">
+      <span class="stat-pill ${heroNet >= 0 ? "good" : "bad"}">Hero Net: ${heroNet >= 0 ? "+" : ""}${heroNet.toFixed(3)}bb</span>
+      <span class="stat-pill ${villainNet >= 0 ? "good" : "bad"}">Villain Net: ${villainNet >= 0 ? "+" : ""}${villainNet.toFixed(3)}bb</span>
+    </div>
+  `;
 }
 
 function renderLiveActions(hand) {
@@ -643,6 +910,10 @@ function renderLiveActions(hand) {
 }
 
 async function submitLiveAction() {
+  if (!featureEnabled("allow_live_training")) {
+    setStatus("Upgrade to Elite to submit live actions.", true);
+    return;
+  }
   if (!state.session?.session_id) {
     setStatus("No active session.", true);
     return;
@@ -680,6 +951,10 @@ async function submitLiveAction() {
 }
 
 async function startDrillHand() {
+  if (!featureEnabled("allow_live_training")) {
+    setStatus("Upgrade to Elite to generate drill hands.", true);
+    return;
+  }
   try {
     setStatus("Generating profile drill hand...");
     const opponentProfile = await resolveOpponentProfile();
@@ -702,10 +977,9 @@ async function startDrillHand() {
 
 function renderDrillScenario(s) {
   const mapped = state.drillMappedArchetype;
-  const randFlags = s.randomization || {};
   els.drillMeta.textContent =
     `ID ${s.scenario_id} | ${titleCase(s.street)} | ${titleCase(s.node_type.replaceAll("_", " "))} | ` +
-    `2/2 in hand | Opponent model: ${mapped?.label || "N/A"} | Hero random: ${!!randFlags.hero_profile}`;
+    `2/2 in hand | Opponent model: ${mapped?.label || "N/A"}`;
 
   const boardCards = (s.board || []).map(cardNode).join("");
   const heroCards = (s.hero_hand || []).map(cardNode).join("");
@@ -724,7 +998,6 @@ function renderDrillScenario(s) {
     .join("");
 
   const history = (s.action_history || []).map((line) => `<li>${escapeHtml(line)}</li>`).join("");
-  const heroStats = s.hero_profile || {};
 
   els.drillTable.classList.remove("empty");
   els.drillTable.innerHTML = `
@@ -732,10 +1005,6 @@ function renderDrillScenario(s) {
       <span>Pot: ${s.pot_bb}bb</span>
       <span>To call: ${s.to_call_bb}bb</span>
       <span>Eff stack: ${s.effective_stack_bb}bb</span>
-    </div>
-    <div class="table-headline">
-      <span>Hero VPIP/PFR/AF: ${Number((heroStats.vpip || 0) * 100).toFixed(1)} / ${Number((heroStats.pfr || 0) * 100).toFixed(1)} / ${Number(heroStats.af || 0).toFixed(2)}</span>
-      <span>Style: ${escapeHtml(heroStats.style_label || "N/A")}</span>
     </div>
     <div><strong>Board:</strong> <div class="board-row">${boardCards || "<em>(preflop)</em>"}</div></div>
     <div><strong>Hero:</strong> <div class="board-row">${heroCards}</div></div>
@@ -866,6 +1135,10 @@ function updateDrillDecisionButtonStates() {
 }
 
 async function submitDrillDecision() {
+  if (!featureEnabled("allow_live_training")) {
+    setStatus("Upgrade to Elite to submit drill decisions.", true);
+    return;
+  }
   if (!state.drillScenario) {
     setStatus("Generate a drill hand first.", true);
     return;
@@ -1152,6 +1425,21 @@ async function apiPost(url, payload) {
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+  });
+  if (res.status === 401) {
+    window.location.href = `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+    throw new Error("Authentication required");
+  }
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+
+async function apiUpload(url, formData) {
+  const res = await fetch(url, {
+    method: "POST",
+    credentials: "same-origin",
+    body: formData,
   });
   if (res.status === 401) {
     window.location.href = `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`;

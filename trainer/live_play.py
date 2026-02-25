@@ -267,7 +267,11 @@ class LiveMatch:
             "seed": self.seed,
             "match": {
                 "hands_played": self.hands_played,
+                "starting_stack_bb": round(self.starting_stack_bb, 3),
                 "hero_net_bb": round(self.hero_net_bb, 3),
+                "villain_net_bb": round(-self.hero_net_bb, 3),
+                "hero_bankroll_bb": round(self.starting_stack_bb + self.hero_net_bb, 3),
+                "villain_bankroll_bb": round(self.starting_stack_bb - self.hero_net_bb, 3),
                 "mode": self.mode,
                 "opponent": self.opponent.to_dict(),
             },

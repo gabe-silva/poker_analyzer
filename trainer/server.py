@@ -46,6 +46,58 @@ class TrainerRequestHandler(SimpleHTTPRequestHandler):
             return {}
         return json.loads(raw.decode("utf-8"))
 
+    def _read_multipart_files(self) -> list[tuple[str, bytes]]:
+        content_type = str(self.headers.get("Content-Type", "")).strip()
+        if "multipart/form-data" not in content_type.lower():
+            return []
+        boundary = ""
+        for part in content_type.split(";"):
+            token = part.strip()
+            if token.lower().startswith("boundary="):
+                boundary = token.split("=", 1)[1].strip().strip('"')
+                break
+        if not boundary:
+            return []
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            length = 0
+        if length <= 0:
+            return []
+        raw = self.rfile.read(length)
+        if not raw:
+            return []
+
+        delimiter = f"--{boundary}".encode("utf-8")
+        out: list[tuple[str, bytes]] = []
+        for part in raw.split(delimiter):
+            chunk = part.strip(b"\r\n")
+            if not chunk or chunk == b"--":
+                continue
+            if chunk.endswith(b"--"):
+                chunk = chunk[:-2]
+            header_blob, marker, body = chunk.partition(b"\r\n\r\n")
+            if not marker:
+                continue
+            headers_text = header_blob.decode("utf-8", errors="ignore")
+            disposition = ""
+            for header_line in headers_text.split("\r\n"):
+                if header_line.lower().startswith("content-disposition:"):
+                    disposition = header_line
+                    break
+            if 'name="files"' not in disposition:
+                continue
+            filename = ""
+            for token in disposition.split(";"):
+                token = token.strip()
+                if token.startswith("filename="):
+                    filename = token.split("=", 1)[1].strip().strip('"')
+                    break
+            if body.endswith(b"\r\n"):
+                body = body[:-2]
+            out.append((filename, bytes(body)))
+        return out
+
     def log_message(self, format: str, *args: Any) -> None:
         # Keep terminal output concise while running drills.
         return super().log_message(format, *args)
@@ -74,6 +126,12 @@ class TrainerRequestHandler(SimpleHTTPRequestHandler):
                 return
             self._send_json(self.service.analyzer_profile(str(name)))
             return
+        if path == "/api/opponent/compare":
+            self._send_json({"error": "Use POST /api/opponent/compare"}, status=405)
+            return
+        if path == "/api/hands/players":
+            self._send_json(self.service.hands_players())
+            return
         if path == "/api/live/state":
             session_id = (query.get("session_id") or [None])[0]
             if not session_id:
@@ -84,7 +142,9 @@ class TrainerRequestHandler(SimpleHTTPRequestHandler):
         if path == "/api/health":
             self._send_json({"ok": True})
             return
-        if path in {"/", "/setup"}:
+        if path in {"/", "/index"}:
+            self.path = "/index.html"
+        elif path == "/setup":
             self.path = "/setup.html"
         elif path == "/trainer":
             self.path = "/trainer.html"
@@ -97,7 +157,30 @@ class TrainerRequestHandler(SimpleHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
         try:
+            if path == "/api/hands/upload":
+                self._send_json(self.service.upload_hands(self._read_multipart_files()), status=200)
+                return
             payload = self._read_json_body()
+            if path == "/api/opponent/compare":
+                groups = payload.get("groups")
+                if not isinstance(groups, list) or not groups:
+                    self._send_json({"error": "groups is required and must be a list"}, status=400)
+                    return
+                out = []
+                for idx, group in enumerate(groups):
+                    if not isinstance(group, dict):
+                        self._send_json({"error": "Each group must be an object"}, status=400)
+                        return
+                    usernames = group.get("usernames")
+                    aliases = [str(v).strip() for v in (usernames or []) if str(v).strip()]
+                    if not aliases:
+                        self._send_json({"error": f"Group {idx + 1} requires at least one username"}, status=400)
+                        return
+                    prof = self.service.analyzer_profile(",".join(aliases))
+                    prof["group_label"] = str(group.get("label", f"Player {idx + 1}")).strip() or f"Player {idx + 1}"
+                    out.append(prof)
+                self._send_json({"profiles": out}, status=200)
+                return
             if path == "/api/generate":
                 self._send_json(self.service.generate(payload), status=200)
                 return

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Smoke tests for trainer scenario generation and EV evaluation."""
 
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
@@ -196,59 +197,80 @@ def test_poker_theory_formula_sanity():
 
 
 def test_live_play_session_basic():
-    db_path = Path("trainer/data/test_trainer_live.db")
-    if db_path.exists():
-        db_path.unlink()
+    with TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        service = TrainerService(db_path=root / "trainer.db")
+        uploaded_dir = root / "uploaded_hands"
+        uploaded_dir.mkdir(parents=True, exist_ok=True)
+        service._uploaded_hands_dir = uploaded_dir
 
-    service = TrainerService(db_path=db_path)
-    started = service.live_start(
-        {
-            "opponent_source": "preset",
-            "preset_key": "charlie",
-            "starting_stack_bb": 100,
-            "seed": 77,
-        }
-    )
-    session_id = started["session_id"]
-    assert session_id.startswith("live_")
-    assert started["match"]["opponent"]["name"] == "CHARLIE"
-    assert len(started["hand"]["legal_actions"]) >= 1
-    assert "villain_range_summary" in started["hand"]
-    assert "top_weighted_hands" in started["hand"]["villain_range_summary"]
-    assert "hero_image_score" in started["hand"]["villain_range_summary"]
-    assert len(started["hand"]["villain_range_summary"]["top_weighted_hands"]) >= 4
+        hand_files = sorted(Path("hands").glob("*.json"))
+        assert hand_files
+        service.upload_hands([(hand_files[0].name, hand_files[0].read_bytes())])
+        players = service.hands_players().get("players", [])
+        assert players
+        selected_name = str(players[0]["username"])
 
-    hand = started["hand"]
-    action = hand["legal_actions"][0]
-    payload = {"session_id": session_id, "action": action}
-    if action in {"bet", "raise"}:
-        payload["size_bb"] = hand["size_options_bb"][0]
-        payload["intent"] = "value"
-    acted = service.live_action(payload)
-    assert acted["session_id"] == session_id
-    assert "hand" in acted
+        started = service.live_start(
+            {
+                "analyzer_players": [selected_name],
+                "starting_stack_bb": 100,
+                "seed": 77,
+            }
+        )
+        session_id = started["session_id"]
+        assert session_id.startswith("live_")
+        assert started["match"]["opponent"]["source"] == "uploaded_analyzer"
+        assert started["match"]["opponent"]["name"]
+        assert len(started["hand"]["legal_actions"]) >= 1
+        assert "villain_range_summary" in started["hand"]
+        assert "top_weighted_hands" in started["hand"]["villain_range_summary"]
+        assert "hero_image_score" in started["hand"]["villain_range_summary"]
+        assert len(started["hand"]["villain_range_summary"]["top_weighted_hands"]) >= 4
+        assert "hero_bankroll_bb" in started["match"]
+        assert "villain_bankroll_bb" in started["match"]
 
-    dealt = service.live_new_hand({"session_id": session_id})
-    assert dealt["hand"]["hand_no"] >= 2
+        hand = started["hand"]
+        action = hand["legal_actions"][0]
+        payload = {"session_id": session_id, "action": action}
+        if action in {"bet", "raise"}:
+            payload["size_bb"] = hand["size_options_bb"][0]
+            payload["intent"] = "value"
+        acted = service.live_action(payload)
+        assert acted["session_id"] == session_id
+        assert "hand" in acted
 
-    if db_path.exists():
-        db_path.unlink()
+        dealt = service.live_new_hand({"session_id": session_id})
+        assert dealt["hand"]["hand_no"] >= 2
 
 
 def test_analyzer_profile_cache_invalidates_when_hands_change():
-    db_path = Path("trainer/data/test_trainer_profile_cache.db")
-    if db_path.exists():
-        db_path.unlink()
-
-    service = TrainerService(db_path=db_path)
-
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
-        hands_dir = root / "hands"
-        hands_dir.mkdir(parents=True, exist_ok=True)
-        (hands_dir / "h1.json").write_text("{}", encoding="utf-8")
-        (root / "names.csv").write_text("charlie\nplayer_charlie\n", encoding="utf-8")
-        service._root_dir = root
+        service = TrainerService(db_path=root / "trainer.db")
+        uploaded_dir = root / "uploaded_hands"
+        uploaded_dir.mkdir(parents=True, exist_ok=True)
+        service._uploaded_hands_dir = uploaded_dir
+
+        service.upload_hands(
+            [
+                (
+                    "h1.json",
+                    json.dumps(
+                        {
+                            "hands": [
+                                {
+                                    "players": [
+                                        {"id": "player_friend_one", "name": "friend_one"},
+                                        {"id": "hero", "name": "hero"},
+                                    ]
+                                }
+                            ]
+                        }
+                    ).encode("utf-8"),
+                )
+            ]
+        )
 
         fake_profile = SimpleNamespace(
             play_style=SimpleNamespace(value="Loose-Passive (Calling Station)"),
@@ -291,15 +313,30 @@ def test_analyzer_profile_cache_invalidates_when_hands_change():
         with patch("parser.load_hands", side_effect=fake_load_hands), patch(
             "stats.aggregate.generate_profile", side_effect=fake_generate_profile
         ):
-            _first = service.analyzer_profile("charlie")
-            _second = service.analyzer_profile("charlie")
+            _first = service.analyzer_profile("friend_one")
+            _second = service.analyzer_profile("friend_one")
             assert counters["load_hands"] == 1
             assert counters["generate_profile"] == 1
 
-            (hands_dir / "h2.json").write_text("{}", encoding="utf-8")
-            _third = service.analyzer_profile("charlie")
+            service.upload_hands(
+                [
+                    (
+                        "h2.json",
+                        json.dumps(
+                            {
+                                "hands": [
+                                    {
+                                        "players": [
+                                            {"id": "player_friend_one", "name": "friend_one"},
+                                            {"id": "hero", "name": "hero"},
+                                        ]
+                                    }
+                                ]
+                            }
+                        ).encode("utf-8"),
+                    )
+                ]
+            )
+            _third = service.analyzer_profile("friend_one")
             assert counters["load_hands"] == 3
             assert counters["generate_profile"] == 2
-
-    if db_path.exists():
-        db_path.unlink()

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>LAG Cash Trainer - Play</title>
+  <title>PokerNow Trainer - EV Lab</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body data-page="trainer">
@@ -11,12 +11,13 @@
   <div class="backdrop-orb orb-b"></div>
   <div class="page-wrap">
     <header class="top-hero">
-      <h1>LAG Cash Game Trainer</h1>
-      <p>Table first. Decision quality, EV ranking, and leak decomposition below.</p>
+      <h1>PokerNow Trainer</h1>
+      <p>Table first, then EV ranking and leak decomposition.</p>
       <nav class="top-nav">
+        <a href="/index.html" class="nav-link">Plans</a>
         <a href="/setup.html" class="nav-link">Setup</a>
         <a href="/trainer.html" class="nav-link active">Trainer</a>
-        <a href="/play.html" class="nav-link">Play</a>
+        <a href="/play.html" class="nav-link">Analyzer</a>
         <a href="/standings.html" class="nav-link">Standings</a>
         <a href="/login.html" class="nav-link">Account</a>
       </nav>
@@ -25,11 +26,12 @@
     <main class="trainer-layout">
       <section class="panel scenario-panel">
         <h2>Scenario</h2>
+        <div id="trainerPageLockNotice" class="lock-banner" style="display:none;"></div>
         <div id="scenarioMeta" class="meta-strip">Load or generate a scenario from setup.</div>
         <div class="action-row">
           <button id="regenerateBtn" class="btn-primary">New Setup</button>
           <a class="btn-ghost nav-button" href="/setup.html">Edit Setup</a>
-          <a class="btn-ghost nav-button" href="/play.html">Play Vs Profile</a>
+          <a class="btn-ghost nav-button" href="/play.html">Open Analyzer</a>
           <a class="btn-ghost nav-button" href="/standings.html">Standings</a>
         </div>
         <div id="tableView" class="table-view empty">No scenario loaded</div>

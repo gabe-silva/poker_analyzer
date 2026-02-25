@@ -10,7 +10,7 @@ This project now includes:
 
 ## 1) What You Need To Do Personally
 
-1. Create a Stripe product + recurring price (monthly/yearly).
+1. Create Stripe products/prices for paid tiers (Pro + optional Elite).
 2. Create a Mailgun sending domain/API key.
 3. Create your PythonAnywhere web app and set environment variables.
 4. Point Stripe webhook to your deployed URL.
@@ -48,8 +48,9 @@ Use these steps while your Dashboard says `sandbox`:
    - Open the product, click `Add another price`, create a yearly recurring price if you want one.
 2. Copy price IDs:
    - Open the created price row and copy the ID that starts with `price_`.
-   - This project currently uses one checkout price at a time:
-     - `STRIPE_PRICE_ID=<price_...>`
+   - Set:
+     - `STRIPE_PRICE_ID_PRO=<price_...>` (required)
+     - `STRIPE_PRICE_ID_ELITE=<price_...>` (optional for a second paid tier)
 3. Copy secret API key:
    - Go to `Developers` -> `API keys`.
    - Reveal/copy `Secret key` in sandbox (starts with `sk_test_`).
@@ -88,7 +89,8 @@ Use these steps while your Dashboard says `sandbox`:
 Set these environment variables in PythonAnywhere WSGI config (see section 5):
 
 - `STRIPE_SECRET_KEY` = Stripe secret API key (`sk_test_...` for sandbox, `sk_live_...` for production)
-- `STRIPE_PRICE_ID` = recurring subscription price ID (`price_...`)
+- `STRIPE_PRICE_ID_PRO` = Pro recurring subscription price ID (`price_...`)
+- `STRIPE_PRICE_ID_ELITE` = Elite recurring subscription price ID (`price_...`, optional)
 - `STRIPE_WEBHOOK_SECRET` = webhook signing secret (`whsec_...`)
 
 These are loaded by:
@@ -183,10 +185,12 @@ os.environ["TRAINER_PUBLIC_BASE_URL"] = "https://<your-domain>"
 os.environ["TRAINER_ALLOWED_HOSTS"] = "<your-domain>,www.<your-domain>,<yourusername>.pythonanywhere.com"
 os.environ["TRAINER_FORCE_HTTPS"] = "1"
 os.environ["TRAINER_COOKIE_SECURE"] = "1"
+os.environ["TRAINER_ALLOW_FREE_TIER"] = "1"
 os.environ["TRAINER_DB_PATH"] = "/home/<your-username>/poker_analyzer/trainer/data/trainer.db"
 os.environ["STRIPE_SECRET_KEY"] = "sk_live_..."
 os.environ["STRIPE_WEBHOOK_SECRET"] = "whsec_..."
-os.environ["STRIPE_PRICE_ID"] = "price_..."
+os.environ["STRIPE_PRICE_ID_PRO"] = "price_..."
+os.environ["STRIPE_PRICE_ID_ELITE"] = "price_..."
 os.environ["MAILGUN_API_KEY"] = "key-..."
 os.environ["MAILGUN_DOMAIN"] = "mg.yourdomain.com"
 os.environ["MAILGUN_FROM_EMAIL"] = "Poker Trainer <noreply@mg.yourdomain.com>"
@@ -199,8 +203,8 @@ from wsgi import application
 ## 6) Verify In Browser
 
 1. Open `https://<your-domain>/login`.
-2. Click `Start Subscription` and complete Stripe checkout.
-3. After redirect, app should open `/setup.html`.
+2. Select `Pro` or `Elite`, click `Continue With Plan`, and complete Stripe checkout.
+3. After redirect, app should open `/play.html` (or your `next` path).
 4. Log out and test `Email Login Code`.
 5. Test `Manage Billing`.
 
@@ -212,6 +216,7 @@ from wsgi import application
 - `TRAINER_FORCE_HTTPS=1`
 - `TRAINER_COOKIE_SECURE=1`
 - `TRAINER_ALLOWED_HOSTS` includes only your domains
+- `TRAINER_ALLOW_FREE_TIER=1` if you want free login access enabled
 - `TRAINER_EXPOSE_LOGIN_CODES=0`
 - Stripe webhook secret is set
 - Mailgun sender domain is verified

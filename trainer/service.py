@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-import csv
+from collections import Counter
+import json
 import math
+import re
+import time
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, Iterable, List, Set, Tuple
 
 from trainer.archetypes import archetype_options
 from trainer.constants import (
@@ -26,109 +29,203 @@ from trainer.storage import TrainerStore
 class TrainerService:
     """High-level API used by HTTP handlers and scripts."""
 
+    MAX_UPLOAD_FILE_BYTES = 15 * 1024 * 1024
+    MAX_UPLOAD_BATCH_BYTES = 100 * 1024 * 1024
+
     def __init__(self, db_path: Path):
         self.store = TrainerStore(db_path=db_path)
         self.live_sessions: Dict[str, LiveMatch] = {}
         self._profile_cache: Dict[str, Dict[str, Any]] = {}
         self._root_dir = Path(__file__).resolve().parent.parent
+        self._uploaded_hands_dir = self._root_dir / "trainer" / "data" / "uploaded_hands"
+        self._uploaded_hands_dir.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
-    def _charlie_preset() -> dict:
-        """Profile provided by the user from analyzer dashboard."""
-        return {
-            "key": "charlie",
-            "name": "CHARLIE",
-            "source": "preset",
-            "style_label": "Loose-Passive (Calling Station)",
-            "hands_analyzed": 176,
-            "vpip": 0.574,
-            "pfr": 0.199,
-            "three_bet": 0.077,
-            "fold_to_3bet": 0.0,
-            "limp_rate": 0.386,
-            "af": 0.83,
-            "aggression_frequency": 0.298,
-            "flop_cbet": 0.75,
-            "turn_cbet": 0.0,
-            "river_cbet": 0.0,
-            "double_barrel": 0.579,
-            "triple_barrel": 0.667,
-            "check_raise": 0.105,
-            "wtsd": 0.619,
-            "w_sd": 0.734,
-            "tendencies": [
-                "Plays very loose preflop (VPIP > 33%)",
-                "Large VPIP-PFR gap (calls too much)",
-                "Limps frequently",
-                "C-bets flops frequently then gives up on later streets",
-                "Passive postflop without clear value",
-            ],
-            "exploits": [
-                {
-                    "category": "preflop",
-                    "description": "Raises and limps too wide.",
-                    "counter_strategy": "Isolate bigger preflop and value bet wider.",
-                },
-                {
-                    "category": "postflop",
-                    "description": "High flop c-bet, weak turn follow-through.",
-                    "counter_strategy": "Float wider in position and pressure turns.",
-                },
-            ],
-        }
+    def _sanitize_upload_filename(filename: str, fallback_index: int) -> str:
+        raw = Path(str(filename or "")).name
+        if not raw:
+            raw = f"upload_{fallback_index}.json"
+        safe = re.sub(r"[^A-Za-z0-9._-]+", "_", raw)
+        if not safe.lower().endswith(".json"):
+            safe = f"{safe}.json"
+        return safe
 
     @staticmethod
-    def _baseline_reg_preset() -> dict:
+    def _parse_names_input(player_name: Any) -> List[str]:
+        if isinstance(player_name, list):
+            tokens = [str(v).strip() for v in player_name]
+        else:
+            text = str(player_name or "").strip()
+            if not text:
+                return []
+            tokens = [part.strip() for part in re.split(r"[,\n;]+", text)]
+        return [token for token in tokens if token]
+
+    def _uploaded_hand_files(self) -> List[Path]:
+        if not self._uploaded_hands_dir.exists():
+            return []
+        return sorted(self._uploaded_hands_dir.glob("*.json"))
+
+    def _uploaded_player_index(self) -> Tuple[Dict[str, Dict[str, Any]], int]:
+        """
+        Build username -> metadata index from uploaded raw hand JSON files.
+
+        Username is sourced from player["name"] when present; falls back to player id.
+        """
+        index: Dict[str, Dict[str, Any]] = {}
+        total_hands = 0
+        for file_path in self._uploaded_hand_files():
+            try:
+                raw = json.loads(file_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            hands = raw.get("hands", raw if isinstance(raw, list) else [])
+            if not isinstance(hands, list):
+                continue
+            total_hands += len(hands)
+            for hand in hands:
+                if not isinstance(hand, dict):
+                    continue
+                seen_names_in_hand: Set[str] = set()
+                for player in hand.get("players", []) or []:
+                    if not isinstance(player, dict):
+                        continue
+                    player_id = str(player.get("id", "")).strip()
+                    username = str(player.get("name", "")).strip() or player_id
+                    if not player_id or not username:
+                        continue
+                    key = username.lower()
+                    entry = index.setdefault(
+                        key,
+                        {
+                            "username": username,
+                            "player_ids": set(),
+                            "hands_seen": 0,
+                            "files": set(),
+                        },
+                    )
+                    entry["player_ids"].add(player_id)
+                    entry["files"].add(file_path.name)
+                    if key not in seen_names_in_hand:
+                        entry["hands_seen"] += 1
+                        seen_names_in_hand.add(key)
+        return index, total_hands
+
+    def hands_players(self) -> Dict[str, Any]:
+        index, total_hands = self._uploaded_player_index()
+        players = sorted(
+            (
+                {
+                    "username": entry["username"],
+                    "hands_seen": int(entry["hands_seen"]),
+                    "player_ids": sorted(entry["player_ids"]),
+                }
+                for entry in index.values()
+            ),
+            key=lambda row: (-row["hands_seen"], row["username"].lower()),
+        )
+        files = self._uploaded_hand_files()
         return {
-            "key": "tag_reg",
-            "name": "TAG REG",
-            "source": "preset",
-            "style_label": "TAG Regular",
-            "hands_analyzed": 0,
-            "vpip": 0.23,
-            "pfr": 0.19,
-            "three_bet": 0.085,
-            "fold_to_3bet": 0.52,
-            "limp_rate": 0.05,
-            "af": 2.5,
-            "aggression_frequency": 0.42,
-            "flop_cbet": 0.60,
-            "turn_cbet": 0.47,
-            "river_cbet": 0.35,
-            "check_raise": 0.11,
-            "wtsd": 0.28,
-            "w_sd": 0.52,
-            "tendencies": [],
-            "exploits": [],
+            "players": players,
+            "total_players": len(players),
+            "total_hands": int(total_hands),
+            "uploaded_files": [f.name for f in files],
+            "total_files": len(files),
         }
 
-    def _preset_profiles(self) -> List[dict]:
-        return [self._charlie_preset(), self._baseline_reg_preset()]
+    def upload_hands(
+        self,
+        file_items: List[Tuple[str, bytes]],
+        *,
+        max_total_hands: int | None = None,
+    ) -> Dict[str, Any]:
+        if not file_items:
+            raise ValueError("No files uploaded")
 
-    def _load_player_mappings(self) -> Dict[str, str]:
-        csv_path = self._root_dir / "names.csv"
-        if not csv_path.exists():
-            return {}
-        with open(csv_path, "r", encoding="utf-8") as f:
-            rows = list(csv.reader(f))
-        if len(rows) < 2:
-            return {}
-        out: Dict[str, str] = {}
-        for name, player_id in zip(rows[0], rows[1]):
-            if name and player_id:
-                out[name.strip().lower()] = player_id.strip()
-        return out
+        total_bytes = 0
+        prepared: List[Dict[str, Any]] = []
+        for idx, (filename, content) in enumerate(file_items):
+            blob = bytes(content or b"")
+            if not blob:
+                continue
+            file_size = len(blob)
+            if file_size > self.MAX_UPLOAD_FILE_BYTES:
+                raise ValueError(
+                    f"File too large: {filename} (max {self.MAX_UPLOAD_FILE_BYTES // (1024 * 1024)}MB each)"
+                )
+            total_bytes += file_size
+            if total_bytes > self.MAX_UPLOAD_BATCH_BYTES:
+                raise ValueError(
+                    f"Total upload too large (max {self.MAX_UPLOAD_BATCH_BYTES // (1024 * 1024)}MB per upload)"
+                )
+            safe_name = self._sanitize_upload_filename(filename, idx + 1)
+            try:
+                decoded = blob.decode("utf-8")
+                payload = json.loads(decoded)
+            except (UnicodeDecodeError, ValueError) as exc:
+                raise ValueError(f"Invalid JSON file: {filename}") from exc
+
+            hands = payload.get("hands", payload if isinstance(payload, list) else [])
+            if not isinstance(hands, list):
+                raise ValueError(f"Invalid hand payload in {filename}: expected list of hands")
+
+            prepared.append(
+                {
+                    "safe_name": safe_name,
+                    "decoded": decoded,
+                    "original_filename": str(filename or ""),
+                    "hands_in_file": len(hands),
+                }
+            )
+
+        if not prepared:
+            raise ValueError("No usable JSON files were uploaded")
+
+        saved: List[Dict[str, Any]] = []
+        written_paths: List[Path] = []
+        for idx, item in enumerate(prepared):
+            target_name = f"{int(time.time())}_{idx + 1}_{item['safe_name']}"
+            target_path = self._uploaded_hands_dir / target_name
+            target_path.write_text(str(item["decoded"]), encoding="utf-8")
+            written_paths.append(target_path)
+            saved.append(
+                {
+                    "original_filename": str(item["original_filename"]),
+                    "stored_filename": target_name,
+                    "hands_in_file": int(item["hands_in_file"]),
+                }
+            )
+
+        status = self.hands_players()
+        if max_total_hands is not None and int(status.get("total_hands", 0)) > int(max_total_hands):
+            for path in written_paths:
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
+            self._profile_cache.clear()
+            status = self.hands_players()
+            raise ValueError(
+                f"Upload exceeds plan limit of {int(max_total_hands)} total hands. "
+                f"Current uploaded hands: {int(status.get('total_hands', 0))}."
+            )
+        self._profile_cache.clear()
+        return {
+            "saved_files": saved,
+            **status,
+        }
 
     def analyzer_players(self) -> List[str]:
-        return sorted(self._load_player_mappings().keys())
+        uploaded = self.hands_players().get("players", [])
+        return [str(row["username"]) for row in uploaded]
 
     def _hands_snapshot_signature(self) -> str:
         """Stable signature of analyzer hand files used for cache invalidation."""
-        hands_dir = self._root_dir / "hands"
-        if not hands_dir.exists():
+        files = self._uploaded_hand_files()
+        if not files:
             return "missing"
         parts: List[str] = []
-        for hand_file in sorted(hands_dir.glob("*.json")):
+        for hand_file in files:
             try:
                 st = hand_file.stat()
             except OSError:
@@ -136,43 +233,22 @@ class TrainerService:
             parts.append(f"{hand_file.name}:{st.st_size}:{st.st_mtime_ns}")
         return "|".join(parts)
 
-    def analyzer_profile(self, player_name: str) -> dict:
-        key = str(player_name or "").strip().lower()
-        if not key:
-            raise ValueError("player_name is required")
-        hands_snapshot = self._hands_snapshot_signature()
-        cached = self._profile_cache.get(key)
-        if cached and cached.get("snapshot") == hands_snapshot:
-            profile = cached.get("profile")
-            if isinstance(profile, dict):
-                return profile
-
-        mappings = self._load_player_mappings()
-        player_id = mappings.get(key)
-        if not player_id:
-            raise ValueError(f"Player not found in names.csv: {player_name}")
-
-        hands_dir = self._root_dir / "hands"
-        if not hands_dir.exists():
-            raise ValueError(f"Hands directory not found: {hands_dir}")
-
-        from parser import load_hands  # local import to avoid startup cost
-        from stats.aggregate import generate_profile
-
-        all_hands = []
-        for hand_file in sorted(hands_dir.glob("*.json")):
-            all_hands.extend(load_hands(hand_file))
-        if not all_hands:
-            raise ValueError("No hands loaded from hands directory")
-
-        profile = generate_profile(all_hands, player_id)
+    @staticmethod
+    def _profile_dict_from_generated(
+        profile: Any,
+        *,
+        key: str,
+        name: str,
+        source: str,
+        include_exploits: bool = True,
+    ) -> dict:
         af = profile.postflop.total_aggression_factor
         if af == float("inf") or math.isinf(af):
             af = 6.0
-        built = {
+        return {
             "key": key,
-            "name": key.upper(),
-            "source": "analyzer",
+            "name": name,
+            "source": source,
             "style_label": profile.play_style.value,
             "hands_analyzed": profile.hands_analyzed,
             "vpip": round(profile.preflop.vpip, 4),
@@ -191,16 +267,175 @@ class TrainerService:
             "wtsd": round(profile.showdown.wtsd, 4),
             "w_sd": round(profile.showdown.w_sd, 4),
             "tendencies": list(profile.tendencies[:8]),
-            "exploits": [
-                {
-                    "category": e.category,
-                    "description": e.description,
-                    "counter_strategy": e.counter_strategy,
-                }
-                for e in profile.exploits[:5]
-            ],
+            "exploits": (
+                [
+                    {
+                        "category": e.category,
+                        "description": e.description,
+                        "counter_strategy": e.counter_strategy,
+                    }
+                    for e in profile.exploits[:5]
+                ]
+                if include_exploits
+                else []
+            ),
         }
-        self._profile_cache[key] = {
+
+    @staticmethod
+    def _weighted_average(profiles: Iterable[dict], field: str) -> float:
+        rows = list(profiles)
+        if not rows:
+            return 0.0
+        total_w = sum(max(1, int(p.get("hands_analyzed", 0))) for p in rows)
+        if total_w <= 0:
+            return 0.0
+        weighted = sum(float(p.get(field, 0.0)) * max(1, int(p.get("hands_analyzed", 0))) for p in rows)
+        return weighted / total_w
+
+    def _resolve_player_ids(self, names: List[str]) -> Tuple[Set[str], List[str], str]:
+        uploaded_index, _total_hands = self._uploaded_player_index()
+        if not uploaded_index:
+            raise ValueError("No uploaded hand files found. Upload PokerNow JSON hand files first.")
+        ids: Set[str] = set()
+        display: List[str] = []
+        for raw_name in names:
+            key = raw_name.lower().strip()
+            entry = uploaded_index.get(key)
+            if not entry:
+                raise ValueError(f"Username not found in uploaded hands: {raw_name}")
+            ids.update(entry["player_ids"])
+            display.append(str(entry["username"]))
+        return ids, display, "uploaded_analyzer"
+
+    def analyzer_profile(
+        self,
+        player_name: str,
+        *,
+        include_exploits: bool = True,
+        max_usernames: int | None = None,
+    ) -> dict:
+        names = self._parse_names_input(player_name)
+        if not names:
+            raise ValueError("player_name is required")
+        if max_usernames is not None and len(names) > int(max_usernames):
+            raise ValueError(
+                f"Too many usernames selected ({len(names)}). "
+                f"Your plan allows up to {int(max_usernames)} aliases per profile."
+            )
+        key = "|".join(sorted(n.lower() for n in names))
+        cache_key = f"{'x' if include_exploits else 'no-x'}::{key}"
+        hands_snapshot = self._hands_snapshot_signature()
+        cached = self._profile_cache.get(cache_key)
+        if cached and cached.get("snapshot") == hands_snapshot:
+            profile = cached.get("profile")
+            if isinstance(profile, dict):
+                return profile
+
+        active_files = self._uploaded_hand_files()
+        if not active_files:
+            raise ValueError("No hand files available. Upload JSON hand histories first.")
+        player_ids, display_names, source = self._resolve_player_ids(names)
+
+        from parser import load_hands  # local import to avoid startup cost
+        from stats.aggregate import generate_profile
+
+        all_hands = []
+        for hand_file in active_files:
+            all_hands.extend(load_hands(hand_file))
+        if not all_hands:
+            raise ValueError("No hands loaded from available hand files")
+
+        per_player_profiles: List[dict] = []
+        for player_id in sorted(player_ids):
+            generated = generate_profile(all_hands, player_id)
+            if generated.hands_analyzed <= 0:
+                continue
+            per_player_profiles.append(
+                self._profile_dict_from_generated(
+                    generated,
+                    key=player_id,
+                    name=player_id,
+                    source=source,
+                    include_exploits=include_exploits,
+                )
+            )
+        if not per_player_profiles:
+            requested = ", ".join(display_names)
+            raise ValueError(f"No analyzable hands found for: {requested}")
+
+        if len(per_player_profiles) == 1:
+            single = dict(per_player_profiles[0])
+            single["key"] = key
+            single["name"] = display_names[0].upper()
+            single["selected_usernames"] = display_names
+            single["player_ids"] = sorted(player_ids)
+            if not include_exploits:
+                single["exploits"] = []
+            built = single
+        else:
+            style_counter: Counter[str] = Counter()
+            tendency_counter: Counter[str] = Counter()
+            exploit_counter: Counter[Tuple[str, str, str]] = Counter()
+            total_hands = 0
+
+            for profile in per_player_profiles:
+                w = max(1, int(profile.get("hands_analyzed", 0)))
+                total_hands += w
+                style_counter[str(profile.get("style_label") or "Unknown")] += w
+                for tendency in profile.get("tendencies", []):
+                    tendency_counter[str(tendency)] += w
+                for exploit in profile.get("exploits", []):
+                    exploit_counter[
+                        (
+                            str(exploit.get("category", "postflop")),
+                            str(exploit.get("description", "")),
+                            str(exploit.get("counter_strategy", "")),
+                        )
+                    ] += w
+
+            exploits = []
+            if include_exploits:
+                exploits = [
+                    {
+                        "category": category,
+                        "description": description,
+                        "counter_strategy": counter,
+                    }
+                    for (category, description, counter), _ in exploit_counter.most_common(5)
+                    if description
+                ]
+            built = {
+                "key": key,
+                "name": " + ".join(name.upper() for name in display_names),
+                "source": source,
+                "style_label": style_counter.most_common(1)[0][0] if style_counter else "Unknown",
+                "hands_analyzed": int(total_hands),
+                "vpip": round(self._weighted_average(per_player_profiles, "vpip"), 4),
+                "pfr": round(self._weighted_average(per_player_profiles, "pfr"), 4),
+                "three_bet": round(self._weighted_average(per_player_profiles, "three_bet"), 4),
+                "fold_to_3bet": round(self._weighted_average(per_player_profiles, "fold_to_3bet"), 4),
+                "limp_rate": round(self._weighted_average(per_player_profiles, "limp_rate"), 4),
+                "af": round(self._weighted_average(per_player_profiles, "af"), 3),
+                "aggression_frequency": round(self._weighted_average(per_player_profiles, "aggression_frequency"), 4),
+                "flop_cbet": round(self._weighted_average(per_player_profiles, "flop_cbet"), 4),
+                "turn_cbet": round(self._weighted_average(per_player_profiles, "turn_cbet"), 4),
+                "river_cbet": round(self._weighted_average(per_player_profiles, "river_cbet"), 4),
+                "double_barrel": round(self._weighted_average(per_player_profiles, "double_barrel"), 4),
+                "triple_barrel": round(self._weighted_average(per_player_profiles, "triple_barrel"), 4),
+                "check_raise": round(self._weighted_average(per_player_profiles, "check_raise"), 4),
+                "wtsd": round(self._weighted_average(per_player_profiles, "wtsd"), 4),
+                "w_sd": round(self._weighted_average(per_player_profiles, "w_sd"), 4),
+                "tendencies": [text for text, _ in tendency_counter.most_common(8)],
+                "exploits": exploits,
+                "selected_usernames": display_names,
+                "player_ids": sorted(player_ids),
+                "players_aggregated": len(per_player_profiles),
+            }
+
+        built.setdefault("selected_usernames", display_names)
+        built.setdefault("player_ids", sorted(player_ids))
+        built.setdefault("players_aggregated", len(per_player_profiles))
+        self._profile_cache[cache_key] = {
             "snapshot": hands_snapshot,
             "profile": built,
         }
@@ -214,11 +449,9 @@ class TrainerService:
             "position_sets": POSITION_SETS,
             "archetypes": archetype_options(),
             "live": {
-                "presets": self._preset_profiles(),
                 "analyzer_players": self.analyzer_players(),
+                "hands_status": self.hands_players(),
                 "defaults": {
-                    "opponent_source": "preset",
-                    "preset_key": "charlie",
                     "starting_stack_bb": DEFAULT_STACK_BB,
                     "targeted_mode": False,
                     "target_config": {
@@ -240,14 +473,6 @@ class TrainerService:
                 "default_stack_bb": DEFAULT_STACK_BB,
                 "sb": DEFAULT_SB,
                 "bb": DEFAULT_BB,
-                "hero_profile": {
-                    "vpip": 0.30,
-                    "pfr": 0.22,
-                    "af": 2.8,
-                    "three_bet": 0.09,
-                    "fold_to_3bet": 0.54,
-                },
-                "randomize_hero_profile": False,
                 "randomize_archetypes": False,
             },
         }
@@ -299,24 +524,18 @@ class TrainerService:
         return self.store.clear_saved_hands()
 
     def live_start(self, payload: dict) -> dict:
-        source = str(payload.get("opponent_source", "preset"))
-        opponent_profile: dict
-        if source == "analyzer":
-            name = str(payload.get("analyzer_player", "")).strip()
-            if not name:
-                raise ValueError("analyzer_player is required for analyzer source")
-            opponent_profile = self.analyzer_profile(name)
-        elif source == "custom":
-            raw = payload.get("opponent_profile")
-            if not isinstance(raw, dict):
-                raise ValueError("opponent_profile is required for custom source")
-            opponent_profile = dict(raw)
-            opponent_profile.setdefault("name", "CUSTOM OPPONENT")
-            opponent_profile.setdefault("source", "custom")
+        requested_names = (
+            payload.get("analyzer_players")
+            or payload.get("opponent_usernames")
+            or payload.get("analyzer_player")
+        )
+        if isinstance(requested_names, list):
+            joined_names = ",".join(str(v).strip() for v in requested_names if str(v).strip())
         else:
-            preset_key = str(payload.get("preset_key", "charlie")).lower()
-            preset_map = {p["key"]: p for p in self._preset_profiles()}
-            opponent_profile = dict(preset_map.get(preset_key) or self._charlie_preset())
+            joined_names = str(requested_names or "").strip()
+        if not joined_names:
+            raise ValueError("Select at least one opponent username from uploaded hand files")
+        opponent_profile = self.analyzer_profile(joined_names)
 
         targeted_mode = bool(payload.get("targeted_mode", False))
         target_config = payload.get("target_config") if isinstance(payload.get("target_config"), dict) else None
