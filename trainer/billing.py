@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -53,7 +54,7 @@ PLAN_ENTITLEMENTS: Dict[str, Dict[str, Any]] = {
         "max_compare_groups": 2,
         "show_exploits": True,
         "allow_multi_profile_compare": True,
-        "allow_training_workbench": False,
+        "allow_training_workbench": True,
         "allow_live_training": False,
     },
     PLAN_ELITE: {
@@ -114,6 +115,7 @@ class BillingConfig:
     mailgun_api_key: str
     mailgun_domain: str
     mailgun_from_email: str
+    mailgun_base_url: str
     allow_free_tier: bool
     expose_login_codes: bool
 
@@ -487,11 +489,13 @@ class MailgunClient:
         api_key: str,
         domain: str,
         from_email: str,
+        base_url: str = "https://api.mailgun.net",
         timeout_seconds: int = 12,
     ):
         self.api_key = str(api_key or "").strip()
         self.domain = str(domain or "").strip()
         self.from_email = str(from_email or "").strip()
+        self.base_url = str(base_url or "https://api.mailgun.net").strip().rstrip("/")
         self.timeout_seconds = int(timeout_seconds)
 
     @property
@@ -516,7 +520,7 @@ class MailgunClient:
         ).encode("utf-8")
         auth = base64.b64encode(f"api:{self.api_key}".encode("utf-8")).decode("utf-8")
         req = Request(
-            url=f"https://api.mailgun.net/v3/{self.domain}/messages",
+            url=f"{self.base_url}/v3/{self.domain}/messages",
             data=payload,
             method="POST",
             headers={
@@ -524,10 +528,23 @@ class MailgunClient:
                 "Content-Type": "application/x-www-form-urlencoded",
             },
         )
-        with urlopen(req, timeout=self.timeout_seconds) as resp:
-            status = getattr(resp, "status", 200)
-            if int(status) >= 400:
-                raise RuntimeError(f"Mailgun rejected request with status {status}")
+        try:
+            with urlopen(req, timeout=self.timeout_seconds) as resp:
+                status = getattr(resp, "status", 200)
+                if int(status) >= 400:
+                    raise RuntimeError(f"Mailgun rejected request with status {status}")
+        except HTTPError as exc:
+            detail = ""
+            try:
+                body = exc.read().decode("utf-8", errors="ignore").strip()
+                if body:
+                    detail = f" ({body[:220]})"
+            except Exception:  # noqa: BLE001
+                detail = ""
+            raise RuntimeError(f"Mailgun API error {exc.code}{detail}") from exc
+        except URLError as exc:
+            reason = str(getattr(exc, "reason", exc))
+            raise RuntimeError(f"Mailgun network error: {reason}") from exc
 
 
 class BillingService:
@@ -540,6 +557,7 @@ class BillingService:
             api_key=config.mailgun_api_key,
             domain=config.mailgun_domain,
             from_email=config.mailgun_from_email,
+            base_url=config.mailgun_base_url,
         )
         if stripe is not None and self.config.stripe_secret_key:
             stripe.api_key = self.config.stripe_secret_key

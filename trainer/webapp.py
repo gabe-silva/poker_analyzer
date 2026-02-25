@@ -150,6 +150,7 @@ def _load_billing_config(runtime: RuntimeConfig) -> BillingConfig:
         mailgun_from_email=str(
             os.getenv("MAILGUN_FROM_EMAIL", "Poker Trainer <noreply@localhost>")
         ).strip(),
+        mailgun_base_url=str(os.getenv("MAILGUN_BASE_URL", "https://api.mailgun.net")).strip(),
         allow_free_tier=_env_bool("TRAINER_ALLOW_FREE_TIER", True),
         expose_login_codes=_env_bool(
             "TRAINER_EXPOSE_LOGIN_CODES",
