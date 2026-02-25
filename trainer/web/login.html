@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Poker Trainer - Access</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body data-page="login">
+  <div class="backdrop-orb orb-a"></div>
+  <div class="backdrop-orb orb-b"></div>
+  <div class="page-wrap">
+    <header class="top-hero">
+      <h1>Poker Trainer Access</h1>
+      <p>Start your subscription, then sign in with a one-time email code.</p>
+    </header>
+
+    <main class="auth-layout">
+      <section class="panel auth-panel">
+        <h2>Account Access</h2>
+        <div class="field-grid">
+          <label>
+            Email
+            <input id="emailInput" type="email" autocomplete="email" placeholder="you@example.com" />
+          </label>
+          <label>
+            Login Code
+            <input id="codeInput" type="text" inputmode="numeric" maxlength="6" placeholder="6-digit code" />
+          </label>
+        </div>
+
+        <div class="action-row">
+          <button id="subscribeBtn" class="btn-primary">Start Subscription</button>
+          <button id="requestCodeBtn" class="btn-ghost">Email Login Code</button>
+          <button id="verifyCodeBtn" class="btn-ghost">Verify & Sign In</button>
+        </div>
+
+        <div class="action-row">
+          <button id="portalBtn" class="btn-ghost">Manage Billing</button>
+          <button id="continueBtn" class="btn-ghost">Open Trainer</button>
+          <button id="logoutBtn" class="btn-ghost">Log Out</button>
+        </div>
+
+        <p id="statusLine" class="status-line"></p>
+      </section>
+    </main>
+  </div>
+
+  <script src="/auth.js"></script>
+</body>
+</html>

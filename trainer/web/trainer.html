@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LAG Cash Trainer - Play</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body data-page="trainer">
+  <div class="backdrop-orb orb-a"></div>
+  <div class="backdrop-orb orb-b"></div>
+  <div class="page-wrap">
+    <header class="top-hero">
+      <h1>LAG Cash Game Trainer</h1>
+      <p>Table first. Decision quality, EV ranking, and leak decomposition below.</p>
+      <nav class="top-nav">
+        <a href="/setup.html" class="nav-link">Setup</a>
+        <a href="/trainer.html" class="nav-link active">Trainer</a>
+        <a href="/play.html" class="nav-link">Play</a>
+        <a href="/standings.html" class="nav-link">Standings</a>
+        <a href="/login.html" class="nav-link">Account</a>
+      </nav>
+    </header>
+
+    <main class="trainer-layout">
+      <section class="panel scenario-panel">
+        <h2>Scenario</h2>
+        <div id="scenarioMeta" class="meta-strip">Load or generate a scenario from setup.</div>
+        <div class="action-row">
+          <button id="regenerateBtn" class="btn-primary">New Setup</button>
+          <a class="btn-ghost nav-button" href="/setup.html">Edit Setup</a>
+          <a class="btn-ghost nav-button" href="/play.html">Play Vs Profile</a>
+          <a class="btn-ghost nav-button" href="/standings.html">Standings</a>
+        </div>
+        <div id="tableView" class="table-view empty">No scenario loaded</div>
+        <div id="decisionPrompt" class="prompt-box"></div>
+        <div id="decisionPanel" class="decision-panel"></div>
+      </section>
+
+      <section class="panel feedback-panel">
+        <h2>EV Feedback</h2>
+        <div id="feedbackSummary" class="feedback-summary">Submit a decision to see EV results.</div>
+        <div id="evTableWrap"></div>
+      </section>
+
+      <section class="panel feedback-panel">
+        <h2>Leak Decomposition</h2>
+        <div id="leakBreakdownWrap"></div>
+      </section>
+    </main>
+
+    <p id="statusLine" class="status-line"></p>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

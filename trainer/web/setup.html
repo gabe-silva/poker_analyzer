@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LAG Cash Trainer - Setup</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body data-page="setup">
+  <div class="backdrop-orb orb-a"></div>
+  <div class="backdrop-orb orb-b"></div>
+  <div class="page-wrap">
+    <header class="top-hero">
+      <h1>LAG Cash Game Trainer</h1>
+      <p>Setup drills here. Play and EV analysis happens on the trainer page.</p>
+      <nav class="top-nav">
+        <a href="/setup.html" class="nav-link active">Setup</a>
+        <a href="/trainer.html" class="nav-link">Trainer</a>
+        <a href="/play.html" class="nav-link">Play</a>
+        <a href="/standings.html" class="nav-link">Standings</a>
+        <a href="/login.html" class="nav-link">Account</a>
+      </nav>
+    </header>
+
+    <main class="setup-layout">
+      <section class="panel controls-panel">
+        <h2>Scenario Controls</h2>
+        <div class="field-grid">
+          <label>
+            Players
+            <select id="numPlayers"></select>
+          </label>
+          <label>
+            Street
+            <select id="street"></select>
+          </label>
+          <label>
+            Node Type
+            <select id="nodeType"></select>
+          </label>
+          <label>
+            Action Context
+            <select id="actionContext"></select>
+          </label>
+          <label>
+            Hero Position
+            <select id="heroPosition"></select>
+          </label>
+          <label>
+            Players In Hand
+            <input id="playersInHand" type="number" min="2" max="7" />
+          </label>
+          <label>
+            Default Stack (bb)
+            <input id="defaultStack" type="number" min="20" max="400" step="1" />
+          </label>
+          <label>
+            Random Seed (optional)
+            <input id="seed" type="number" min="1" step="1" placeholder="auto" />
+          </label>
+        </div>
+
+        <div class="toggle-row">
+          <label class="switch-wrap">
+            <input id="equalStacks" type="checkbox" checked />
+            <span>Equal stacks for all seats</span>
+          </label>
+          <div class="blind-chip">Blinds fixed: 1 / 2</div>
+        </div>
+
+        <div class="toggle-row">
+          <label class="switch-wrap">
+            <input id="randomizeHeroProfile" type="checkbox" />
+            <span>Randomize Hero Stats Each Scenario</span>
+          </label>
+          <label class="switch-wrap">
+            <input id="randomizeArchetypes" type="checkbox" />
+            <span>Randomize Opponent Types</span>
+          </label>
+        </div>
+
+        <div class="hero-profile-block">
+          <h3>Hero Stats (used by EV model)</h3>
+          <div class="field-grid">
+            <label>
+              VPIP (%)
+              <input id="heroVpip" type="number" min="5" max="80" step="0.1" />
+            </label>
+            <label>
+              PFR (%)
+              <input id="heroPfr" type="number" min="3" max="60" step="0.1" />
+            </label>
+            <label>
+              AF
+              <input id="heroAf" type="number" min="0.5" max="8" step="0.1" />
+            </label>
+            <label>
+              3-Bet (%)
+              <input id="hero3bet" type="number" min="1" max="30" step="0.1" />
+            </label>
+            <label>
+              Fold to 3-Bet (%)
+              <input id="heroFold3bet" type="number" min="10" max="90" step="0.1" />
+            </label>
+          </div>
+        </div>
+
+        <div class="seat-config">
+          <h3>Seat Setup</h3>
+          <div id="seatConfigTable"></div>
+        </div>
+
+        <div class="action-row">
+          <button id="generateBtn" class="btn-primary">Generate Scenario & Open Trainer</button>
+          <a class="btn-ghost nav-button" href="/play.html">Open Play</a>
+          <a class="btn-ghost nav-button" href="/standings.html">Open Standings</a>
+        </div>
+        <p id="statusLine" class="status-line"></p>
+      </section>
+    </main>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

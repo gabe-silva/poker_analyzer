@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LAG Cash Trainer - Play vs Profile</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body data-page="play">
+  <div class="backdrop-orb orb-a"></div>
+  <div class="backdrop-orb orb-b"></div>
+  <div class="page-wrap">
+    <header class="top-hero">
+      <h1>LAG Cash Game Trainer</h1>
+      <p>Play vs one profile in two modes: full-match simulation or single-hand EV drills.</p>
+      <nav class="top-nav">
+        <a href="/setup.html" class="nav-link">Setup</a>
+        <a href="/trainer.html" class="nav-link">Trainer</a>
+        <a href="/play.html" class="nav-link active">Play</a>
+        <a href="/standings.html" class="nav-link">Standings</a>
+        <a href="/login.html" class="nav-link">Account</a>
+      </nav>
+    </header>
+
+    <main class="play-layout">
+      <section class="panel">
+        <h2>Profile Setup</h2>
+        <div class="mode-toggle-row">
+          <label class="mode-pill">
+            <input id="playModeFull" type="radio" name="playMode" value="full_match" checked />
+            <span>Full Match</span>
+          </label>
+          <label class="mode-pill">
+            <input id="playModeDrill" type="radio" name="playMode" value="single_hand_drill" />
+            <span>Single Hand Drill</span>
+          </label>
+        </div>
+        <div class="field-grid">
+          <label>
+            Opponent Source
+            <select id="opponentSource">
+              <option value="preset">Preset</option>
+              <option value="analyzer">Analyzer Player</option>
+              <option value="custom">Custom</option>
+            </select>
+          </label>
+          <label>
+            Preset
+            <select id="presetKey"></select>
+          </label>
+          <label>
+            Analyzer Player
+            <select id="analyzerPlayer"></select>
+          </label>
+          <label>
+            Starting Stack (bb)
+            <input id="startingStackBb" type="number" min="20" max="400" step="1" value="100" />
+          </label>
+          <label>
+            Random Seed (optional)
+            <input id="liveSeed" type="number" min="1" step="1" placeholder="auto" />
+          </label>
+          <label>
+            Opponent Name
+            <input id="customName" type="text" value="CUSTOM OPPONENT" />
+          </label>
+        </div>
+
+        <div class="hero-profile-block">
+          <h3>Custom Opponent Stats</h3>
+          <div class="field-grid">
+            <label>VPIP (%)<input id="cVpip" type="number" min="5" max="90" step="0.1" value="30" /></label>
+            <label>PFR (%)<input id="cPfr" type="number" min="3" max="70" step="0.1" value="20" /></label>
+            <label>3-Bet (%)<input id="c3bet" type="number" min="0" max="30" step="0.1" value="8" /></label>
+            <label>Fold to 3-Bet (%)<input id="cF3b" type="number" min="0" max="100" step="0.1" value="45" /></label>
+            <label>Limp Rate (%)<input id="cLimp" type="number" min="0" max="100" step="0.1" value="12" /></label>
+            <label>AF<input id="cAf" type="number" min="0.3" max="8" step="0.1" value="2.2" /></label>
+            <label>Flop C-Bet (%)<input id="cFlopCbet" type="number" min="0" max="100" step="0.1" value="58" /></label>
+            <label>Turn C-Bet (%)<input id="cTurnCbet" type="number" min="0" max="100" step="0.1" value="44" /></label>
+            <label>River C-Bet (%)<input id="cRiverCbet" type="number" min="0" max="100" step="0.1" value="32" /></label>
+            <label>WTSD (%)<input id="cWtsd" type="number" min="0" max="100" step="0.1" value="30" /></label>
+            <label>W$SD (%)<input id="cWsd" type="number" min="0" max="100" step="0.1" value="51" /></label>
+            <label>Check-Raise (%)<input id="cXr" type="number" min="0" max="100" step="0.1" value="9" /></label>
+          </div>
+        </div>
+
+        <div class="toggle-row">
+          <label id="targetedModeWrap" class="switch-wrap">
+            <input id="targetedMode" type="checkbox" />
+            <span>Start From Targeted Scenario (instead of full preflop hand)</span>
+          </label>
+          <label id="useSetupDraftWrap" class="switch-wrap">
+            <input id="useSetupDraft" type="checkbox" checked />
+            <span>Use Setup Page Draft For Targeted Spot</span>
+          </label>
+        </div>
+
+        <div id="targetConfigWrap" class="hero-profile-block">
+          <h3>Targeted Spot Controls</h3>
+          <div class="field-grid">
+            <label>Street<select id="tStreet"></select></label>
+            <label>Node Type<select id="tNodeType"></select></label>
+            <label>Action Context<select id="tActionContext"></select></label>
+            <label>Hero Position<select id="tHeroPosition"></select></label>
+          </div>
+        </div>
+
+        <div id="fullModeActions" class="action-row">
+          <button id="startLiveBtn" class="btn-primary">Start Match</button>
+          <button id="nextHandBtn" class="btn-ghost">Next Hand</button>
+          <a class="btn-ghost nav-button" href="/trainer.html">Back To Trainer</a>
+        </div>
+        <div id="drillModeActions" class="action-row" style="display:none;">
+          <button id="startDrillBtn" class="btn-primary">Start Drill</button>
+          <button id="newDrillBtn" class="btn-ghost">New Hand</button>
+          <a class="btn-ghost nav-button" href="/trainer.html">Back To Trainer</a>
+        </div>
+      </section>
+
+      <section id="fullModePanel" class="panel">
+        <h2>Live Table</h2>
+        <div id="liveMeta" class="meta-strip">No live session yet.</div>
+        <div id="liveTable" class="table-view empty">Start a match to play vs profile.</div>
+        <div id="liveActions" class="decision-panel"></div>
+      </section>
+
+      <section id="drillModePanel" class="panel" style="display:none;">
+        <h2>Single Hand Drill</h2>
+        <div id="drillMeta" class="meta-strip">No profile drill hand generated yet.</div>
+        <div id="drillTable" class="table-view empty">Start a drill hand to train one decision with full EV feedback.</div>
+        <div id="drillPrompt" class="prompt-box"></div>
+        <div id="drillDecisionPanel" class="decision-panel"></div>
+        <div id="drillFeedbackSummary" class="feedback-summary">Submit a drill decision to see EV ranking and leak decomposition.</div>
+        <div id="drillEvTableWrap"></div>
+        <div id="drillLeakBreakdownWrap"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Match Notes</h2>
+        <div id="opponentSummary" class="feedback-summary">Opponent summary appears after match start.</div>
+      </section>
+    </main>
+
+    <p id="statusLine" class="status-line"></p>
+  </div>
+
+  <script src="/live.js"></script>
+</body>
+</html>

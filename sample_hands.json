@@ -1,0 +1,289 @@
+{
+  "hands": [
+    {
+      "id": "hand_0001",
+      "dealerSeat": 4,
+      "timestamp": "2024-01-15T20:30:00Z",
+      "players": [
+        {"id": "oFoiuzFaF0", "seat": 0, "stack": 1000, "cards": ["Qh", "2d"]},
+        {"id": "player_2", "seat": 1, "stack": 850},
+        {"id": "player_3", "seat": 2, "stack": 1200},
+        {"id": "player_4", "seat": 3, "stack": 950},
+        {"id": "player_5", "seat": 4, "stack": 1100}
+      ],
+      "events": [
+        {"payload": {"type": 3, "seat": 0, "amount": 5}},
+        {"payload": {"type": 2, "seat": 1, "amount": 10}},
+        {"payload": {"type": 11, "seat": 2}},
+        {"payload": {"type": 11, "seat": 3}},
+        {"payload": {"type": 8, "seat": 4, "amount": 30}},
+        {"payload": {"type": 7, "seat": 0, "amount": 25}},
+        {"payload": {"type": 11, "seat": 1}},
+        {"payload": {"type": 9, "cards": ["Kh", "7d", "3c"]}},
+        {"payload": {"type": 0, "seat": 0}},
+        {"payload": {"type": 8, "seat": 4, "amount": 45}},
+        {"payload": {"type": 7, "seat": 0, "amount": 45}},
+        {"payload": {"type": 9, "cards": ["2h"]}},
+        {"payload": {"type": 0, "seat": 0}},
+        {"payload": {"type": 8, "seat": 4, "amount": 80}},
+        {"payload": {"type": 7, "seat": 0, "amount": 80}},
+        {"payload": {"type": 9, "cards": ["9s"]}},
+        {"payload": {"type": 0, "seat": 0}},
+        {"payload": {"type": 8, "seat": 4, "amount": 150}},
+        {"payload": {"type": 7, "seat": 0, "amount": 150}},
+        {"payload": {"type": 10, "seat": 0, "amount": 620, "handDescription": "Two Pair", "cards": ["Qh", "2d"]}}
+      ]
+    },
+    {
+      "id": "hand_0002",
+      "dealerSeat": 0,
+      "timestamp": "2024-01-15T20:35:00Z",
+      "players": [
+        {"id": "oFoiuzFaF0", "seat": 0, "stack": 1620, "cards": ["Jc", "4h"]},
+        {"id": "player_2", "seat": 1, "stack": 840},
+        {"id": "player_3", "seat": 2, "stack": 1200},
+        {"id": "player_4", "seat": 3, "stack": 950},
+        {"id": "player_5", "seat": 4, "stack": 790}
+      ],
+      "events": [
+        {"payload": {"type": 3, "seat": 1, "amount": 5}},
+        {"payload": {"type": 2, "seat": 2, "amount": 10}},
+        {"payload": {"type": 11, "seat": 3}},
+        {"payload": {"type": 11, "seat": 4}},
+        {"payload": {"type": 8, "seat": 0, "amount": 35}},
+        {"payload": {"type": 11, "seat": 1}},
+        {"payload": {"type": 7, "seat": 2, "amount": 25}},
+        {"payload": {"type": 9, "cards": ["Jd", "8c", "2s"]}},
+        {"payload": {"type": 0, "seat": 2}},
+        {"payload": {"type": 8, "seat": 0, "amount": 50}},
+        {"payload": {"type": 7, "seat": 2, "amount": 50}},
+        {"payload": {"type": 9, "cards": ["5h"]}},
+        {"payload": {"type": 0, "seat": 2}},
+        {"payload": {"type": 8, "seat": 0, "amount": 100}},
+        {"payload": {"type": 11, "seat": 2}},
+        {"payload": {"type": 10, "seat": 0, "amount": 220}}
+      ]
+    },
+    {
+      "id": "hand_0003",
+      "dealerSeat": 1,
+      "timestamp": "2024-01-15T20:40:00Z",
+      "players": [
+        {"id": "oFoiuzFaF0", "seat": 0, "stack": 1840, "cards": ["9h", "4d"]},
+        {"id": "player_2", "seat": 1, "stack": 835},
+        {"id": "player_3", "seat": 2, "stack": 1115},
+        {"id": "player_4", "seat": 3, "stack": 950},
+        {"id": "player_5", "seat": 4, "stack": 790}
+      ],
+      "events": [
+        {"payload": {"type": 3, "seat": 2, "amount": 5}},
+        {"payload": {"type": 2, "seat": 3, "amount": 10}},
+        {"payload": {"type": 11, "seat": 4}},
+        {"payload": {"type": 8, "seat": 0, "amount": 30}},
+        {"payload": {"type": 11, "seat": 1}},
+        {"payload": {"type": 7, "seat": 2, "amount": 25}},
+        {"payload": {"type": 11, "seat": 3}},
+        {"payload": {"type": 9, "cards": ["Ah", "Kd", "5c"]}},
+        {"payload": {"type": 0, "seat": 2}},
+        {"payload": {"type": 8, "seat": 0, "amount": 45}},
+        {"payload": {"type": 11, "seat": 2}},
+        {"payload": {"type": 10, "seat": 0, "amount": 105}}
+      ]
+    },
+    {
+      "id": "hand_0004",
+      "dealerSeat": 2,
+      "timestamp": "2024-01-15T20:45:00Z",
+      "players": [
+        {"id": "oFoiuzFaF0", "seat": 0, "stack": 1945},
+        {"id": "player_2", "seat": 1, "stack": 835},
+        {"id": "player_3", "seat": 2, "stack": 1010},
+        {"id": "player_4", "seat": 3, "stack": 940},
+        {"id": "player_5", "seat": 4, "stack": 790}
+      ],
+      "events": [
+        {"payload": {"type": 3, "seat": 3, "amount": 5}},
+        {"payload": {"type": 2, "seat": 4, "amount": 10}},
+        {"payload": {"type": 8, "seat": 0, "amount": 30}},
+        {"payload": {"type": 11, "seat": 1}},
+        {"payload": {"type": 11, "seat": 2}},
+        {"payload": {"type": 8, "seat": 3, "amount": 90}},
+        {"payload": {"type": 11, "seat": 4}},
+        {"payload": {"type": 11, "seat": 0}},
+        {"payload": {"type": 10, "seat": 3, "amount": 45}}
+      ]
+    },
+    {
+      "id": "hand_0005",
+      "dealerSeat": 3,
+      "timestamp": "2024-01-15T20:50:00Z",
+      "players": [
+        {"id": "oFoiuzFaF0", "seat": 0, "stack": 1915, "cards": ["Ah", "Qc"]},
+        {"id": "player_2", "seat": 1, "stack": 835},
+        {"id": "player_3", "seat": 2, "stack": 1010},
+        {"id": "player_4", "seat": 3, "stack": 985},
+        {"id": "player_5", "seat": 4, "stack": 780}
+      ],
+      "events": [
+        {"payload": {"type": 3, "seat": 4, "amount": 5}},
+        {"payload": {"type": 2, "seat": 0, "amount": 10}},
+        {"payload": {"type": 11, "seat": 1}},
+        {"payload": {"type": 8, "seat": 2, "amount": 30}},
+        {"payload": {"type": 11, "seat": 3}},
+        {"payload": {"type": 7, "seat": 4, "amount": 25}},
+        {"payload": {"type": 8, "seat": 0, "amount": 110}},
+        {"payload": {"type": 11, "seat": 2}},
+        {"payload": {"type": 11, "seat": 4}},
+        {"payload": {"type": 10, "seat": 0, "amount": 75}}
+      ]
+    },
+    {
+      "id": "hand_0006",
+      "dealerSeat": 4,
+      "timestamp": "2024-01-15T20:55:00Z",
+      "players": [
+        {"id": "oFoiuzFaF0", "seat": 0, "stack": 1990, "cards": ["Th", "9h"]},
+        {"id": "player_2", "seat": 1, "stack": 835},
+        {"id": "player_3", "seat": 2, "stack": 980},
+        {"id": "player_4", "seat": 3, "stack": 985},
+        {"id": "player_5", "seat": 4, "stack": 750}
+      ],
+      "events": [
+        {"payload": {"type": 3, "seat": 0, "amount": 5}},
+        {"payload": {"type": 2, "seat": 1, "amount": 10}},
+        {"payload": {"type": 11, "seat": 2}},
+        {"payload": {"type": 11, "seat": 3}},
+        {"payload": {"type": 8, "seat": 4, "amount": 30}},
+        {"payload": {"type": 7, "seat": 0, "amount": 25}},
+        {"payload": {"type": 11, "seat": 1}},
+        {"payload": {"type": 9, "cards": ["8h", "7d", "2h"]}},
+        {"payload": {"type": 0, "seat": 0}},
+        {"payload": {"type": 8, "seat": 4, "amount": 40}},
+        {"payload": {"type": 8, "seat": 0, "amount": 120}},
+        {"payload": {"type": 11, "seat": 4}},
+        {"payload": {"type": 10, "seat": 0, "amount": 180}}
+      ]
+    },
+    {
+      "id": "hand_0007",
+      "dealerSeat": 0,
+      "timestamp": "2024-01-15T21:00:00Z",
+      "players": [
+        {"id": "oFoiuzFaF0", "seat": 0, "stack": 2170, "cards": ["Kc", "Jd"]},
+        {"id": "player_2", "seat": 1, "stack": 825},
+        {"id": "player_3", "seat": 2, "stack": 980},
+        {"id": "player_4", "seat": 3, "stack": 985},
+        {"id": "player_5", "seat": 4, "stack": 600}
+      ],
+      "events": [
+        {"payload": {"type": 3, "seat": 1, "amount": 5}},
+        {"payload": {"type": 2, "seat": 2, "amount": 10}},
+        {"payload": {"type": 11, "seat": 3}},
+        {"payload": {"type": 11, "seat": 4}},
+        {"payload": {"type": 8, "seat": 0, "amount": 30}},
+        {"payload": {"type": 11, "seat": 1}},
+        {"payload": {"type": 7, "seat": 2, "amount": 20}},
+        {"payload": {"type": 9, "cards": ["Kh", "9c", "4d"]}},
+        {"payload": {"type": 0, "seat": 2}},
+        {"payload": {"type": 8, "seat": 0, "amount": 45}},
+        {"payload": {"type": 7, "seat": 2, "amount": 45}},
+        {"payload": {"type": 9, "cards": ["3s"]}},
+        {"payload": {"type": 0, "seat": 2}},
+        {"payload": {"type": 8, "seat": 0, "amount": 80}},
+        {"payload": {"type": 7, "seat": 2, "amount": 80}},
+        {"payload": {"type": 9, "cards": ["2c"]}},
+        {"payload": {"type": 0, "seat": 2}},
+        {"payload": {"type": 8, "seat": 0, "amount": 180}},
+        {"payload": {"type": 7, "seat": 2, "amount": 180}},
+        {"payload": {"type": 10, "seat": 0, "amount": 685, "handDescription": "Pair", "cards": ["Kc", "Jd"]}}
+      ]
+    },
+    {
+      "id": "hand_0008",
+      "dealerSeat": 1,
+      "timestamp": "2024-01-15T21:05:00Z",
+      "players": [
+        {"id": "oFoiuzFaF0", "seat": 0, "stack": 2855},
+        {"id": "player_2", "seat": 1, "stack": 820},
+        {"id": "player_3", "seat": 2, "stack": 645},
+        {"id": "player_4", "seat": 3, "stack": 985},
+        {"id": "player_5", "seat": 4, "stack": 600}
+      ],
+      "events": [
+        {"payload": {"type": 3, "seat": 2, "amount": 5}},
+        {"payload": {"type": 2, "seat": 3, "amount": 10}},
+        {"payload": {"type": 11, "seat": 4}},
+        {"payload": {"type": 11, "seat": 0}},
+        {"payload": {"type": 11, "seat": 1}},
+        {"payload": {"type": 11, "seat": 2}},
+        {"payload": {"type": 10, "seat": 3, "amount": 15}}
+      ]
+    },
+    {
+      "id": "hand_0009",
+      "dealerSeat": 2,
+      "timestamp": "2024-01-15T21:10:00Z",
+      "players": [
+        {"id": "oFoiuzFaF0", "seat": 0, "stack": 2855, "cards": ["5s", "5d"]},
+        {"id": "player_2", "seat": 1, "stack": 820},
+        {"id": "player_3", "seat": 2, "stack": 640},
+        {"id": "player_4", "seat": 3, "stack": 990},
+        {"id": "player_5", "seat": 4, "stack": 600}
+      ],
+      "events": [
+        {"payload": {"type": 3, "seat": 3, "amount": 5}},
+        {"payload": {"type": 2, "seat": 4, "amount": 10}},
+        {"payload": {"type": 8, "seat": 0, "amount": 30}},
+        {"payload": {"type": 11, "seat": 1}},
+        {"payload": {"type": 11, "seat": 2}},
+        {"payload": {"type": 7, "seat": 3, "amount": 25}},
+        {"payload": {"type": 7, "seat": 4, "amount": 20}},
+        {"payload": {"type": 9, "cards": ["Qd", "5h", "3c"]}},
+        {"payload": {"type": 0, "seat": 3}},
+        {"payload": {"type": 0, "seat": 4}},
+        {"payload": {"type": 8, "seat": 0, "amount": 60}},
+        {"payload": {"type": 11, "seat": 3}},
+        {"payload": {"type": 7, "seat": 4, "amount": 60}},
+        {"payload": {"type": 9, "cards": ["9d"]}},
+        {"payload": {"type": 0, "seat": 4}},
+        {"payload": {"type": 8, "seat": 0, "amount": 120}},
+        {"payload": {"type": 7, "seat": 4, "amount": 120}},
+        {"payload": {"type": 9, "cards": ["Kc"]}},
+        {"payload": {"type": 0, "seat": 4}},
+        {"payload": {"type": 8, "seat": 0, "amount": 250}},
+        {"payload": {"type": 7, "seat": 4, "amount": 250}},
+        {"payload": {"type": 10, "seat": 0, "amount": 925, "handDescription": "Three of a Kind", "cards": ["5s", "5d"]}}
+      ]
+    },
+    {
+      "id": "hand_0010",
+      "dealerSeat": 3,
+      "timestamp": "2024-01-15T21:15:00Z",
+      "players": [
+        {"id": "oFoiuzFaF0", "seat": 0, "stack": 3780, "cards": ["8d", "6c"]},
+        {"id": "player_2", "seat": 1, "stack": 820},
+        {"id": "player_3", "seat": 2, "stack": 640},
+        {"id": "player_4", "seat": 3, "stack": 935},
+        {"id": "player_5", "seat": 4, "stack": 135}
+      ],
+      "events": [
+        {"payload": {"type": 3, "seat": 4, "amount": 5}},
+        {"payload": {"type": 2, "seat": 0, "amount": 10}},
+        {"payload": {"type": 11, "seat": 1}},
+        {"payload": {"type": 11, "seat": 2}},
+        {"payload": {"type": 8, "seat": 3, "amount": 30}},
+        {"payload": {"type": 7, "seat": 4, "amount": 25}},
+        {"payload": {"type": 7, "seat": 0, "amount": 20}},
+        {"payload": {"type": 9, "cards": ["7h", "5d", "4s"]}},
+        {"payload": {"type": 0, "seat": 4}},
+        {"payload": {"type": 0, "seat": 0}},
+        {"payload": {"type": 8, "seat": 3, "amount": 55}},
+        {"payload": {"type": 7, "seat": 4, "amount": 55}},
+        {"payload": {"type": 8, "seat": 0, "amount": 180}},
+        {"payload": {"type": 11, "seat": 3}},
+        {"payload": {"type": 7, "seat": 4, "amount": 45}},
+        {"payload": {"type": 10, "seat": 0, "amount": 370, "handDescription": "Straight", "cards": ["8d", "6c"]}}
+      ]
+    }
+  ]
+}
