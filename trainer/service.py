@@ -66,13 +66,15 @@ class TrainerService:
             return []
         return sorted(self._uploaded_hands_dir.glob("*.json"))
 
-    def _uploaded_player_index(self) -> Tuple[Dict[str, Dict[str, Any]], int]:
+    def _uploaded_player_index(self) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, Set[str]], int]:
         """
-        Build username -> metadata index from uploaded raw hand JSON files.
+        Build player buckets keyed by player id plus an alias lookup.
 
-        Username is sourced from player["name"] when present; falls back to player id.
+        Returns:
+            (by_player_id, alias_to_player_id_keys, total_hands)
         """
-        index: Dict[str, Dict[str, Any]] = {}
+        by_player_id: Dict[str, Dict[str, Any]] = {}
+        alias_to_ids: Dict[str, Set[str]] = {}
         total_hands = 0
         for file_path in self._uploaded_hand_files():
             try:
@@ -86,7 +88,7 @@ class TrainerService:
             for hand in hands:
                 if not isinstance(hand, dict):
                     continue
-                seen_names_in_hand: Set[str] = set()
+                seen_ids_in_hand: Set[str] = set()
                 for player in hand.get("players", []) or []:
                     if not isinstance(player, dict):
                         continue
@@ -94,35 +96,40 @@ class TrainerService:
                     username = str(player.get("name", "")).strip() or player_id
                     if not player_id or not username:
                         continue
-                    key = username.lower()
-                    entry = index.setdefault(
-                        key,
+                    id_key = player_id.lower()
+                    entry = by_player_id.setdefault(
+                        id_key,
                         {
-                            "username": username,
-                            "player_ids": set(),
+                            "player_id": player_id,
+                            "usernames": set(),
                             "hands_seen": 0,
                             "files": set(),
                         },
                     )
-                    entry["player_ids"].add(player_id)
+                    entry["usernames"].add(username)
                     entry["files"].add(file_path.name)
-                    if key not in seen_names_in_hand:
+                    alias_to_ids.setdefault(username.lower(), set()).add(id_key)
+                    if id_key not in seen_ids_in_hand:
                         entry["hands_seen"] += 1
-                        seen_names_in_hand.add(key)
-        return index, total_hands
+                        seen_ids_in_hand.add(id_key)
+        return by_player_id, alias_to_ids, total_hands
 
     def hands_players(self) -> Dict[str, Any]:
-        index, total_hands = self._uploaded_player_index()
+        by_player_id, _alias_to_ids, total_hands = self._uploaded_player_index()
         players = sorted(
             (
                 {
-                    "username": entry["username"],
+                    "selection_key": f"id:{entry['player_id']}",
+                    "player_id": entry["player_id"],
+                    "username": sorted(entry["usernames"], key=str.lower)[0],
+                    "display_name": " / ".join(sorted(entry["usernames"], key=str.lower)),
+                    "usernames": sorted(entry["usernames"], key=str.lower),
                     "hands_seen": int(entry["hands_seen"]),
-                    "player_ids": sorted(entry["player_ids"]),
+                    "player_ids": [entry["player_id"]],
                 }
-                for entry in index.values()
+                for entry in by_player_id.values()
             ),
-            key=lambda row: (-row["hands_seen"], row["username"].lower()),
+            key=lambda row: (-row["hands_seen"], row["display_name"].lower()),
         )
         files = self._uploaded_hand_files()
         return {
@@ -217,7 +224,7 @@ class TrainerService:
 
     def analyzer_players(self) -> List[str]:
         uploaded = self.hands_players().get("players", [])
-        return [str(row["username"]) for row in uploaded]
+        return [str(row.get("selection_key") or row.get("username")) for row in uploaded]
 
     def _hands_snapshot_signature(self) -> str:
         """Stable signature of analyzer hand files used for cache invalidation."""
@@ -293,18 +300,39 @@ class TrainerService:
         return weighted / total_w
 
     def _resolve_player_ids(self, names: List[str]) -> Tuple[Set[str], List[str], str]:
-        uploaded_index, _total_hands = self._uploaded_player_index()
-        if not uploaded_index:
+        by_player_id, alias_to_ids, _total_hands = self._uploaded_player_index()
+        if not by_player_id:
             raise ValueError("No uploaded hand files found. Upload PokerNow JSON hand files first.")
         ids: Set[str] = set()
         display: List[str] = []
+        seen_bucket_ids: Set[str] = set()
         for raw_name in names:
-            key = raw_name.lower().strip()
-            entry = uploaded_index.get(key)
-            if not entry:
-                raise ValueError(f"Username not found in uploaded hands: {raw_name}")
-            ids.update(entry["player_ids"])
-            display.append(str(entry["username"]))
+            token = raw_name.strip()
+            token_key = token.lower()
+            matched_bucket_ids: Set[str] = set()
+
+            if token_key.startswith("id:"):
+                bucket_key = token_key[3:].strip()
+                if bucket_key:
+                    matched_bucket_ids.add(bucket_key)
+            elif token_key in by_player_id:
+                matched_bucket_ids.add(token_key)
+            else:
+                matched_bucket_ids.update(alias_to_ids.get(token_key, set()))
+
+            if not matched_bucket_ids:
+                raise ValueError(f"Username or player id not found in uploaded hands: {raw_name}")
+
+            for bucket_id in sorted(matched_bucket_ids):
+                if bucket_id in seen_bucket_ids:
+                    continue
+                entry = by_player_id.get(bucket_id)
+                if not entry:
+                    continue
+                seen_bucket_ids.add(bucket_id)
+                ids.add(str(entry["player_id"]))
+                names_joined = " / ".join(sorted(entry["usernames"], key=str.lower))
+                display.append(names_joined)
         return ids, display, "uploaded_analyzer"
 
     def analyzer_profile(

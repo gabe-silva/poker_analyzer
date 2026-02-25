@@ -389,13 +389,17 @@ function fillAnalyzerPlayerSelect(players, preserveSelection = true) {
   const previouslySelected = preserveSelection ? new Set(getSelectedAnalyzerPlayers()) : new Set();
   const options = (players || [])
     .map((row) => {
-      const username = String(row.username || "").trim();
-      if (!username) return "";
+      const selectionKey = String(row.selection_key || row.player_id || row.username || "").trim();
+      if (!selectionKey) return "";
+      const displayName = String(
+        row.display_name ||
+          (Array.isArray(row.usernames) && row.usernames.length ? row.usernames.join(" / ") : row.username || ""),
+      ).trim();
+      if (!displayName) return "";
       const handsSeen = Number(row.hands_seen || 0);
-      const ids = Array.isArray(row.player_ids) ? row.player_ids.length : 0;
-      const label = `${username.toUpperCase()} (${handsSeen} hands, ${ids} id${ids === 1 ? "" : "s"})`;
-      const selected = previouslySelected.has(username) ? " selected" : "";
-      return `<option value="${escapeHtml(username)}"${selected}>${escapeHtml(label)}</option>`;
+      const label = `${displayName.toUpperCase()} (${handsSeen} hands)`;
+      const selected = previouslySelected.has(selectionKey) ? " selected" : "";
+      return `<option value="${escapeHtml(selectionKey)}"${selected}>${escapeHtml(label)}</option>`;
     })
     .filter(Boolean)
     .join("");
@@ -431,7 +435,7 @@ async function refreshHandsPlayers(showStatus = true) {
   fillAnalyzerPlayerSelect(status.players || [], true);
   renderHandsStatus(status);
   if (showStatus) {
-    setStatus(`Loaded ${Number(status.total_players || 0)} usernames from ${Number(status.total_files || 0)} file(s).`);
+    setStatus(`Loaded ${Number(status.total_players || 0)} player buckets from ${Number(status.total_files || 0)} file(s).`);
   }
   return status;
 }
@@ -450,7 +454,7 @@ async function uploadHandsFiles() {
     fillAnalyzerPlayerSelect(status.players || [], false);
     renderHandsStatus(status);
     if (els.handsFiles) els.handsFiles.value = "";
-    setStatus(`Upload complete. Found ${Number(status.total_players || 0)} usernames.`);
+    setStatus(`Upload complete. Found ${Number(status.total_players || 0)} player buckets.`);
   } catch (err) {
     setStatus(`Upload failed: ${err.message}`, true);
   }
