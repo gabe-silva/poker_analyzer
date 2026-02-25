@@ -412,7 +412,7 @@ def create_app() -> Flask:
     def api_progress():
         blocked = _require_plan_feature(
             "allow_training_workbench",
-            "Upgrade to Elite to access the training standings dashboard.",
+            "Upgrade to Pro to access the training standings dashboard.",
         )
         if blocked:
             return blocked
@@ -532,7 +532,7 @@ def create_app() -> Flask:
     def api_generate():
         blocked = _require_plan_feature(
             "allow_training_workbench",
-            "Upgrade to Elite to generate training scenarios.",
+            "Upgrade to Pro to generate training scenarios.",
         )
         if blocked:
             return blocked
@@ -542,7 +542,7 @@ def create_app() -> Flask:
     def api_evaluate():
         blocked = _require_plan_feature(
             "allow_training_workbench",
-            "Upgrade to Elite to run EV evaluations.",
+            "Upgrade to Pro to run EV evaluations.",
         )
         if blocked:
             return blocked
@@ -552,7 +552,7 @@ def create_app() -> Flask:
     def api_clear_saved():
         blocked = _require_plan_feature(
             "allow_training_workbench",
-            "Upgrade to Elite to clear training history.",
+            "Upgrade to Pro to clear training history.",
         )
         if blocked:
             return blocked

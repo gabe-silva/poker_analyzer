@@ -118,7 +118,7 @@ async function bootstrapSetup() {
   if (!planAllowsTrainingWorkbench()) {
     lockPanel(
       "trainerLockNotice",
-      "Elite tier required for scenario generation. Use the Analyzer page for free/pro profile stats.",
+      "Pro tier required for scenario generation. Use the Analyzer page for free profile stats.",
     );
     disabledByLock(
       "#numPlayers,#street,#nodeType,#actionContext,#heroPosition,#heroTrainingStyle,#playersInHand,#defaultStack,#seed,#equalStacks,#randomizeArchetypes,#generateBtn",
@@ -502,7 +502,7 @@ async function bootstrapTrainer() {
   if (!planAllowsTrainingWorkbench()) {
     lockPanel(
       "trainerPageLockNotice",
-      "Elite tier required for EV training. Upgrade to unlock scenario generation and scoring.",
+      "Pro tier required for EV training. Upgrade to unlock scenario generation and scoring.",
     );
     if (els.decisionPanel) {
       els.decisionPanel.innerHTML = "";
@@ -877,7 +877,7 @@ async function bootstrapStandings() {
   if (!planAllowsTrainingWorkbench()) {
     lockPanel(
       "standingsLockNotice",
-      "Elite tier required for standings and attempt history.",
+      "Pro tier required for standings and attempt history.",
     );
     if (els.refreshProgressBtn) els.refreshProgressBtn.disabled = true;
     if (els.clearSavedBtn) els.clearSavedBtn.disabled = true;

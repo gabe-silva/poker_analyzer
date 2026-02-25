@@ -175,6 +175,64 @@ body {
   gap: 6px;
 }
 
+.landing-steps {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 8px;
+  color: var(--text-1);
+}
+
+.tour-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.tour-card {
+  border: 1px solid rgba(255, 222, 151, 0.22);
+  border-radius: 12px;
+  background: rgba(7, 18, 13, 0.55);
+  padding: 10px;
+}
+
+.tour-card h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+  color: #f3dfaf;
+}
+
+.screenshot-slot {
+  position: relative;
+  min-height: 140px;
+  border: 1px dashed rgba(217, 165, 62, 0.45);
+  border-radius: 10px;
+  background: rgba(8, 15, 12, 0.6);
+  overflow: hidden;
+}
+
+.tour-shot {
+  display: block;
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+}
+
+.screenshot-placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  color: var(--text-2);
+  font-size: 0.86rem;
+  padding: 8px;
+}
+
+.screenshot-placeholder code {
+  color: #f3dfaf;
+}
+
 .auth-layout {
   display: grid;
   grid-template-columns: minmax(280px, 640px);
@@ -407,6 +465,18 @@ textarea {
   margin-bottom: 8px;
   color: var(--text-2);
   font-size: 0.9rem;
+}
+
+.snippet-block {
+  margin: 10px 0 0;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 222, 151, 0.2);
+  background: rgba(8, 15, 12, 0.8);
+  color: #f8f2e5;
+  padding: 10px;
+  font-family: "SFMono-Regular", "Consolas", "Menlo", monospace;
+  font-size: 0.8rem;
+  overflow-x: auto;
 }
 
 .lock-banner {

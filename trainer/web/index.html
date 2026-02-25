@@ -23,12 +23,12 @@
 
     <main class="landing-layout">
       <section class="panel">
-        <h2>What You Get For Free</h2>
+        <h2>What The Platform Does</h2>
         <ul class="landing-list">
-          <li>Upload PokerNow JSON files and analyze up to <strong>500 total hands</strong>.</li>
-          <li>Build a stats dashboard for <strong>one player profile</strong> from selected aliases.</li>
-          <li>See VPIP/PFR/3bet/AF/WTSD style breakdowns.</li>
-          <li>No exploit recommendations in Free.</li>
+          <li>Parse PokerNow JSON hand histories in bulk.</li>
+          <li>Bucket players by stable PokerNow player ID while preserving all observed display names.</li>
+          <li>Build fast profile stats dashboards with optional exploit recommendations.</li>
+          <li>Deliver style-based training and live friend-vs training at higher tiers.</li>
         </ul>
       </section>
 
@@ -37,8 +37,9 @@
           <h2>Free</h2>
           <p class="tier-price">$0 / month</p>
           <ul class="landing-list">
-            <li>Unlock your personal statistics: VPIP, PFR, and more</li>
-            <li>Uplpad up to 500 hands</li>
+            <li>Upload and analyze up to 500 total hands</li>
+            <li>One player bucket at a time</li>
+            <li>Core stats dashboard (no exploits)</li>
           </ul>
           <a class="btn-primary nav-button" href="/login.html?plan=free&next=%2Fplay.html">Start Free</a>
         </article>
@@ -47,31 +48,152 @@
           <h2>Pro</h2>
           <p class="tier-price">$29 / month</p>
           <ul class="landing-list">
-            <li>Compare with friend's side-by-side</li>
-            <li>Playstyle Exploit report unlocked</li>  
-            <li>Up to 1000 hands per player target (2000 total)</li>
+            <li>Exploit recommendations unlocked</li>
+            <li>Compare 2 player groups side-by-side</li>
+            <li>Style-based training workbench unlocked</li>
           </ul>
-          <a class="btn-primary nav-button" href="/login.html?plan=pro&next=%2Fplay.html">Upgrade To Pro</a>
+          <a class="btn-primary nav-button" href="/login.html?plan=pro&next=%2Fsetup.html">Upgrade To Pro</a>
         </article>
 
         <article class="panel tier-card">
           <h2>Elite</h2>
-          <p class="tier-price">Advanced Training Tier</p>
+          <p class="tier-price">Advanced Coaching Tier</p>
           <ul class="landing-list">
             <li>Everything in Pro</li>
-            <li>Train as selected player styles (TAG, LAG, Nit, etc.)</li>
-            <li>Play-vs-friend mode with full feedback and optimal guidance</li>
+            <li>Train against specific friends from uploaded hand data</li>
+            <li>Live table + full guidance feedback</li>
           </ul>
-          <a class="btn-primary nav-button" href="/login.html?plan=elite&next=%2Fsetup.html">Unlock Elite</a>
+          <a class="btn-primary nav-button" href="/login.html?plan=elite&next=%2Fplay.html">Unlock Elite</a>
         </article>
       </section>
 
       <section class="panel">
-        <h2>Feature Locks</h2>
-        <p>
-          Free and Pro accounts can use the Analyzer page immediately. Advanced training pages and live play are hidden
-          unless your account is on Elite.
+        <h2>Product Tour Screenshots</h2>
+        <p class="meta-strip">
+          Add screenshots to <code>trainer/web/screenshots/</code> using the filenames shown in each card.
         </p>
+        <div class="tour-grid">
+          <article class="tour-card">
+            <h3>Free Dashboard</h3>
+            <div class="screenshot-slot">
+              <img
+                class="tour-shot"
+                src="/screenshots/free-dashboard.png"
+                alt="Free dashboard screenshot"
+                loading="lazy"
+                onload="this.nextElementSibling.style.display='none'"
+                onerror="this.style.display='none'"
+              />
+              <div class="screenshot-placeholder">Drop file: <code>free-dashboard.png</code></div>
+            </div>
+            <p class="meta-strip">Own stats, no exploit output.</p>
+          </article>
+          <article class="tour-card">
+            <h3>Pro Compare View</h3>
+            <div class="screenshot-slot">
+              <img
+                class="tour-shot"
+                src="/screenshots/pro-compare.png"
+                alt="Pro compare view screenshot"
+                loading="lazy"
+                onload="this.nextElementSibling.style.display='none'"
+                onerror="this.style.display='none'"
+              />
+              <div class="screenshot-placeholder">Drop file: <code>pro-compare.png</code></div>
+            </div>
+            <p class="meta-strip">Two player groups, exploit output included.</p>
+          </article>
+          <article class="tour-card">
+            <h3>Elite Friend Training</h3>
+            <div class="screenshot-slot">
+              <img
+                class="tour-shot"
+                src="/screenshots/elite-live-training.png"
+                alt="Elite friend training screenshot"
+                loading="lazy"
+                onload="this.nextElementSibling.style.display='none'"
+                onerror="this.style.display='none'"
+              />
+              <div class="screenshot-placeholder">Drop file: <code>elite-live-training.png</code></div>
+            </div>
+            <p class="meta-strip">Live friend-specific training and guidance.</p>
+          </article>
+          <article class="tour-card">
+            <h3>Style Setup</h3>
+            <div class="screenshot-slot">
+              <img
+                class="tour-shot"
+                src="/screenshots/setup-style-training.png"
+                alt="Style setup screenshot"
+                loading="lazy"
+                onload="this.nextElementSibling.style.display='none'"
+                onerror="this.style.display='none'"
+              />
+              <div class="screenshot-placeholder">Drop file: <code>setup-style-training.png</code></div>
+            </div>
+            <p class="meta-strip">Train as TAG/LAG/Nit/etc from Setup.</p>
+          </article>
+          <article class="tour-card">
+            <h3>EV Feedback</h3>
+            <div class="screenshot-slot">
+              <img
+                class="tour-shot"
+                src="/screenshots/trainer-ev-feedback.png"
+                alt="EV feedback screenshot"
+                loading="lazy"
+                onload="this.nextElementSibling.style.display='none'"
+                onerror="this.style.display='none'"
+              />
+              <div class="screenshot-placeholder">Drop file: <code>trainer-ev-feedback.png</code></div>
+            </div>
+            <p class="meta-strip">Action EV table and leak decomposition.</p>
+          </article>
+          <article class="tour-card">
+            <h3>Upload Flow</h3>
+            <div class="screenshot-slot">
+              <img
+                class="tour-shot"
+                src="/screenshots/upload-flow.png"
+                alt="Upload flow screenshot"
+                loading="lazy"
+                onload="this.nextElementSibling.style.display='none'"
+                onerror="this.style.display='none'"
+              />
+              <div class="screenshot-placeholder">Drop file: <code>upload-flow.png</code></div>
+            </div>
+            <p class="meta-strip">Hands upload to ID-bucket selector flow.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Screenshot Setup Checklist</h2>
+        <ol class="landing-steps">
+          <li>Capture your UI screenshots locally and name them exactly as shown above.</li>
+          <li>Copy them into <code>trainer/web/screenshots/</code>.</li>
+          <li>Commit and push to GitHub, then pull on PythonAnywhere and reload the web app.</li>
+        </ol>
+        <pre class="snippet-block"># local (VS Code terminal)
+cd /Users/gabe/Desktop/poker_analyzer
+git add trainer/web/index.html trainer/web/styles.css trainer/web/screenshots/
+git commit -m "Update tier messaging and landing screenshot gallery"
+git push origin main
+
+# PythonAnywhere bash
+workon poker-analyzer
+cd ~/poker_analyzer
+git pull origin main
+# then click "Reload" on the PythonAnywhere Web tab
+</pre>
+      </section>
+
+      <section class="panel">
+        <h2>Tier Boundaries</h2>
+        <ul class="landing-list">
+          <li>Free: analyzer only, one profile bucket, no exploit panel.</li>
+          <li>Pro: analyzer + exploit panel + style-based training in Setup/Trainer.</li>
+          <li>Elite: friend-specific training (live/drill) unlocked on Play page.</li>
+        </ul>
       </section>
     </main>
   </div>
