@@ -112,13 +112,15 @@ function renderPlanSummary() {
   } else if (!checkoutEnabled) {
     parts.push(`${tier.toUpperCase()} checkout is not configured yet.`);
   } else {
-    const price = Number(selected?.monthly_price_usd || 0);
-    const text = price > 0 ? `$${price}/mo` : "paid tier";
-    parts.push(`${tier.toUpperCase()} checkout ready (${text}).`);
+    const selectedLabel = checkoutPlanLabel(tier);
+    parts.push(`Selected: ${selectedLabel}. Click Continue With Plan to open Stripe checkout.`);
   }
 
   if (currentTier === tier) {
     parts.push("You can request a login code now.");
+  }
+  if (tier !== "free" || !!authSnapshot?.plan?.paid) {
+    parts.push("If you switch tiers, cancel any unused subscriptions in Manage Billing.");
   }
 
   els.planSummary.textContent = parts.join(" ");
@@ -149,9 +151,9 @@ function refreshActionVisibility() {
     if (els.verifyCodeBtn) els.verifyCodeBtn.disabled = false;
     toggleVisible(els.portalBtn, false);
   } else {
-    const title = tier === "elite" ? "Elite" : "Pro";
+    const title = checkoutPlanLabel(tier);
     if (els.startPlanBtn) {
-      els.startPlanBtn.textContent = `Continue With ${title} Plan`;
+      els.startPlanBtn.textContent = `Continue With ${title}`;
       els.startPlanBtn.disabled = !checkoutReady;
     }
     toggleVisible(els.requestCodeBtn, true);
@@ -167,6 +169,25 @@ function refreshActionVisibility() {
 
   toggleVisible(els.continueBtn, isAuthenticated);
   toggleVisible(els.logoutBtn, isAuthenticated);
+}
+
+function checkoutPlanLabel(tier) {
+  const normalized = normalizePlanTier(tier);
+  const plan = planByTier(normalized);
+  const fallback = normalized === "elite" ? "Elite Plan ($79/mo)" : normalized === "pro" ? "Pro Plan ($29/mo)" : "Free";
+  const price = Number(plan?.monthly_price_usd || 0);
+  const label = String(plan?.label || "").trim();
+  if (label) {
+    if (price > 0 && !/\$\d+/.test(label)) {
+      return `${label} ($${price}/mo)`;
+    }
+    return label;
+  }
+  if (price > 0 && normalized !== "free") {
+    const title = normalized === "elite" ? "Elite Plan" : "Pro Plan";
+    return `${title} ($${price}/mo)`;
+  }
+  return fallback;
 }
 
 function refreshAccountUi() {
