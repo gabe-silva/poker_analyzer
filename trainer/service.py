@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
+import hashlib
 import json
 import math
 import re
@@ -37,8 +38,22 @@ class TrainerService:
         self.live_sessions: Dict[str, LiveMatch] = {}
         self._profile_cache: Dict[str, Dict[str, Any]] = {}
         self._root_dir = Path(__file__).resolve().parent.parent
-        self._uploaded_hands_dir = self._root_dir / "trainer" / "data" / "uploaded_hands"
-        self._uploaded_hands_dir.mkdir(parents=True, exist_ok=True)
+        self._uploaded_hands_root_dir = self._root_dir / "trainer" / "data" / "uploaded_hands"
+        self._uploaded_hands_root_dir.mkdir(parents=True, exist_ok=True)
+
+    @staticmethod
+    def _user_scope_slug(user_scope: str | None) -> str:
+        raw = str(user_scope or "").strip().lower()
+        if not raw:
+            return "shared"
+        safe_hint = re.sub(r"[^a-z0-9]+", "_", raw.split("@", 1)[0]).strip("_") or "user"
+        digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+        return f"{safe_hint}_{digest}"
+
+    def _uploaded_hands_dir(self, user_scope: str | None = None) -> Path:
+        scope_dir = self._uploaded_hands_root_dir / self._user_scope_slug(user_scope)
+        scope_dir.mkdir(parents=True, exist_ok=True)
+        return scope_dir
 
     @staticmethod
     def _sanitize_upload_filename(filename: str, fallback_index: int) -> str:
@@ -61,12 +76,16 @@ class TrainerService:
             tokens = [part.strip() for part in re.split(r"[,\n;]+", text)]
         return [token for token in tokens if token]
 
-    def _uploaded_hand_files(self) -> List[Path]:
-        if not self._uploaded_hands_dir.exists():
+    def _uploaded_hand_files(self, user_scope: str | None = None) -> List[Path]:
+        upload_dir = self._uploaded_hands_dir(user_scope)
+        if not upload_dir.exists():
             return []
-        return sorted(self._uploaded_hands_dir.glob("*.json"))
+        return sorted(upload_dir.glob("*.json"))
 
-    def _uploaded_player_index(self) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, Set[str]], int]:
+    def _uploaded_player_index(
+        self,
+        user_scope: str | None = None,
+    ) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, Set[str]], int]:
         """
         Build player buckets keyed by player id plus an alias lookup.
 
@@ -76,7 +95,7 @@ class TrainerService:
         by_player_id: Dict[str, Dict[str, Any]] = {}
         alias_to_ids: Dict[str, Set[str]] = {}
         total_hands = 0
-        for file_path in self._uploaded_hand_files():
+        for file_path in self._uploaded_hand_files(user_scope):
             try:
                 raw = json.loads(file_path.read_text(encoding="utf-8"))
             except (OSError, ValueError):
@@ -114,8 +133,8 @@ class TrainerService:
                         seen_ids_in_hand.add(id_key)
         return by_player_id, alias_to_ids, total_hands
 
-    def hands_players(self) -> Dict[str, Any]:
-        by_player_id, _alias_to_ids, total_hands = self._uploaded_player_index()
+    def hands_players(self, user_scope: str | None = None) -> Dict[str, Any]:
+        by_player_id, _alias_to_ids, total_hands = self._uploaded_player_index(user_scope)
         players = sorted(
             (
                 {
@@ -131,7 +150,7 @@ class TrainerService:
             ),
             key=lambda row: (-row["hands_seen"], row["display_name"].lower()),
         )
-        files = self._uploaded_hand_files()
+        files = self._uploaded_hand_files(user_scope)
         return {
             "players": players,
             "total_players": len(players),
@@ -146,6 +165,7 @@ class TrainerService:
         *,
         max_total_hands: int | None = None,
         max_hands_per_bucket: int | None = None,
+        user_scope: str | None = None,
     ) -> Dict[str, Any]:
         if not file_items:
             raise ValueError("No files uploaded")
@@ -191,9 +211,10 @@ class TrainerService:
 
         saved: List[Dict[str, Any]] = []
         written_paths: List[Path] = []
+        upload_dir = self._uploaded_hands_dir(user_scope)
         for idx, item in enumerate(prepared):
             target_name = f"{int(time.time())}_{idx + 1}_{item['safe_name']}"
-            target_path = self._uploaded_hands_dir / target_name
+            target_path = upload_dir / target_name
             target_path.write_text(str(item["decoded"]), encoding="utf-8")
             written_paths.append(target_path)
             saved.append(
@@ -204,7 +225,7 @@ class TrainerService:
                 }
             )
 
-        status = self.hands_players()
+        status = self.hands_players(user_scope)
         def _rollback_uploads() -> Dict[str, Any]:
             for path in written_paths:
                 try:
@@ -212,7 +233,7 @@ class TrainerService:
                 except OSError:
                     pass
             self._profile_cache.clear()
-            return self.hands_players()
+            return self.hands_players(user_scope)
 
         if max_total_hands is not None and int(status.get("total_hands", 0)) > int(max_total_hands):
             status = _rollback_uploads()
@@ -246,13 +267,13 @@ class TrainerService:
             **status,
         }
 
-    def analyzer_players(self) -> List[str]:
-        uploaded = self.hands_players().get("players", [])
+    def analyzer_players(self, user_scope: str | None = None) -> List[str]:
+        uploaded = self.hands_players(user_scope=user_scope).get("players", [])
         return [str(row.get("selection_key") or row.get("username")) for row in uploaded]
 
-    def _hands_snapshot_signature(self) -> str:
+    def _hands_snapshot_signature(self, user_scope: str | None = None) -> str:
         """Stable signature of analyzer hand files used for cache invalidation."""
-        files = self._uploaded_hand_files()
+        files = self._uploaded_hand_files(user_scope)
         if not files:
             return "missing"
         parts: List[str] = []
@@ -323,8 +344,12 @@ class TrainerService:
         weighted = sum(float(p.get(field, 0.0)) * max(1, int(p.get("hands_analyzed", 0))) for p in rows)
         return weighted / total_w
 
-    def _resolve_player_ids(self, names: List[str]) -> Tuple[Set[str], List[str], str]:
-        by_player_id, alias_to_ids, _total_hands = self._uploaded_player_index()
+    def _resolve_player_ids(
+        self,
+        names: List[str],
+        user_scope: str | None = None,
+    ) -> Tuple[Set[str], List[str], str]:
+        by_player_id, alias_to_ids, _total_hands = self._uploaded_player_index(user_scope)
         if not by_player_id:
             raise ValueError("No uploaded hand files found. Upload PokerNow JSON hand files first.")
         ids: Set[str] = set()
@@ -365,6 +390,7 @@ class TrainerService:
         *,
         include_exploits: bool = True,
         max_usernames: int | None = None,
+        user_scope: str | None = None,
     ) -> dict:
         names = self._parse_names_input(player_name)
         if not names:
@@ -375,18 +401,19 @@ class TrainerService:
                 f"Your plan allows up to {int(max_usernames)} aliases per profile."
             )
         key = "|".join(sorted(n.lower() for n in names))
-        cache_key = f"{'x' if include_exploits else 'no-x'}::{key}"
-        hands_snapshot = self._hands_snapshot_signature()
+        scope_slug = self._user_scope_slug(user_scope)
+        cache_key = f"{scope_slug}::{'x' if include_exploits else 'no-x'}::{key}"
+        hands_snapshot = self._hands_snapshot_signature(user_scope)
         cached = self._profile_cache.get(cache_key)
         if cached and cached.get("snapshot") == hands_snapshot:
             profile = cached.get("profile")
             if isinstance(profile, dict):
                 return profile
 
-        active_files = self._uploaded_hand_files()
+        active_files = self._uploaded_hand_files(user_scope)
         if not active_files:
             raise ValueError("No hand files available. Upload JSON hand histories first.")
-        player_ids, display_names, source = self._resolve_player_ids(names)
+        player_ids, display_names, source = self._resolve_player_ids(names, user_scope)
 
         from parser import load_hands  # local import to avoid startup cost
         from stats.aggregate import generate_profile
@@ -493,7 +520,7 @@ class TrainerService:
         }
         return built
 
-    def app_config(self) -> Dict[str, Any]:
+    def app_config(self, user_scope: str | None = None) -> Dict[str, Any]:
         return {
             "streets": STREETS,
             "node_types": NODE_TYPES,
@@ -501,8 +528,8 @@ class TrainerService:
             "position_sets": POSITION_SETS,
             "archetypes": archetype_options(),
             "live": {
-                "analyzer_players": self.analyzer_players(),
-                "hands_status": self.hands_players(),
+                "analyzer_players": self.analyzer_players(user_scope=user_scope),
+                "hands_status": self.hands_players(user_scope=user_scope),
                 "defaults": {
                     "starting_stack_bb": DEFAULT_STACK_BB,
                     "targeted_mode": False,
@@ -575,7 +602,7 @@ class TrainerService:
     def clear_saved_hands(self) -> dict:
         return self.store.clear_saved_hands()
 
-    def live_start(self, payload: dict) -> dict:
+    def live_start(self, payload: dict, *, user_scope: str | None = None) -> dict:
         requested_names = (
             payload.get("analyzer_players")
             or payload.get("opponent_usernames")
@@ -587,7 +614,7 @@ class TrainerService:
             joined_names = str(requested_names or "").strip()
         if not joined_names:
             raise ValueError("Select at least one opponent username from uploaded hand files")
-        opponent_profile = self.analyzer_profile(joined_names)
+        opponent_profile = self.analyzer_profile(joined_names, user_scope=user_scope)
 
         targeted_mode = bool(payload.get("targeted_mode", False))
         target_config = payload.get("target_config") if isinstance(payload.get("target_config"), dict) else None

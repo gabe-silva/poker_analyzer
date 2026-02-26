@@ -213,6 +213,12 @@ def create_app() -> Flask:
             return billing.account_plan(None)
         return billing.account_plan(email)
 
+    def _current_user_scope() -> str | None:
+        if not runtime.require_auth:
+            return None
+        email = str(getattr(g, "current_user_email", "")).strip().lower()
+        return email or None
+
     def _require_plan_feature(feature_key: str, message: str):
         plan = _effective_plan()
         if bool(plan.get(feature_key)):
@@ -399,7 +405,7 @@ def create_app() -> Flask:
 
     @app.get("/api/config")
     def api_config():
-        return jsonify(service.app_config())
+        return jsonify(service.app_config(user_scope=_current_user_scope()))
 
     @app.get("/api/scenario")
     def api_scenario():
@@ -423,6 +429,7 @@ def create_app() -> Flask:
                     name,
                     include_exploits=bool(plan.get("show_exploits")),
                     max_usernames=int(plan.get("max_aliases_per_profile", 12)),
+                    user_scope=_current_user_scope(),
                 )
             )
         except Exception as exc:  # noqa: BLE001
@@ -463,6 +470,7 @@ def create_app() -> Flask:
                     ",".join(selected),
                     include_exploits=bool(plan.get("show_exploits")),
                     max_usernames=int(plan.get("max_aliases_per_profile", 12)),
+                    user_scope=_current_user_scope(),
                 )
                 profile["group_label"] = str(group.get("label", f"Player {idx + 1}")).strip() or f"Player {idx + 1}"
                 profiles.append(profile)
@@ -473,7 +481,7 @@ def create_app() -> Flask:
     @app.get("/api/hands/players")
     def api_hands_players():
         try:
-            return jsonify(service.hands_players())
+            return jsonify(service.hands_players(user_scope=_current_user_scope()))
         except Exception as exc:  # noqa: BLE001
             return _api_error(str(exc), status=400)
 
@@ -497,6 +505,7 @@ def create_app() -> Flask:
                     max_hands_per_bucket=(
                         int(per_bucket_limit) if per_bucket_limit is not None else None
                     ),
+                    user_scope=_current_user_scope(),
                 )
             )
         except Exception as exc:  # noqa: BLE001
@@ -563,7 +572,11 @@ def create_app() -> Flask:
         )
         if blocked:
             return blocked
-        return _json_post(service.live_start)
+        payload = request.get_json(silent=True) or {}
+        try:
+            return jsonify(service.live_start(payload, user_scope=_current_user_scope()))
+        except Exception as exc:  # noqa: BLE001
+            return _api_error(str(exc), status=400)
 
     @app.post("/api/live/action")
     def api_live_action():

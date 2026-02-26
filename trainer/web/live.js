@@ -59,28 +59,14 @@ function renderPlanBadge() {
   els.planBadge.textContent = `Plan: ${label} (${tier}) | Upload cap: ${handLimit} total hands | ${exploitText}`;
 }
 
-function renderFeatureLockNotice() {
-  if (!els.featureLockNotice) return;
-  if (featureEnabled("allow_live_training")) {
-    els.featureLockNotice.style.display = "none";
-    els.featureLockNotice.textContent = "";
-    return;
-  }
-  els.featureLockNotice.style.display = "block";
-  els.featureLockNotice.textContent =
-    "Train against specific friends is Elite-only. Pro can still train by style from Setup/Trainer and use all analyzer tools.";
-}
-
 async function bootstrap() {
   mapIds([
     "planBadge",
-    "featureLockNotice",
     "modeToggleRow",
     "playModeFull",
     "playModeDrill",
     "handsFiles",
     "uploadHandsBtn",
-    "refreshPlayersBtn",
     "analyzerPlayers",
     "analyzeProfileBtn",
     "compareProfilesBtn",
@@ -146,7 +132,6 @@ async function bootstrap() {
   initControls(config);
   bindEvents();
   renderPlanBadge();
-  renderFeatureLockNotice();
   applyPlanLocks();
   try {
     await refreshHandsPlayers(false);
@@ -177,7 +162,7 @@ async function bootstrap() {
   }
 
   if (!featureEnabled("allow_live_training")) {
-    setStatus("Ready. Upload hands and analyze profiles. Live training is an Elite feature.");
+    setStatus("Ready. Upload files, click Upload Hand Files, select username(s), then Analyze Selected Profile.");
   } else if (!state.session && state.playMode === "full_match") {
     setStatus("Ready. Upload hand files and select friend usernames for full match mode.");
   }
@@ -272,9 +257,6 @@ function bindEvents() {
 
   els.targetedMode.addEventListener("change", updateTargetModeUi);
   els.uploadHandsBtn.addEventListener("click", uploadHandsFiles);
-  els.refreshPlayersBtn.addEventListener("click", () => {
-    refreshHandsPlayers().catch((err) => setStatus(`Could not refresh players: ${err.message}`, true));
-  });
   els.analyzeProfileBtn.addEventListener("click", analyzeSelectedProfile);
   if (els.compareProfilesBtn) {
     els.compareProfilesBtn.addEventListener("click", compareProfileGroups);

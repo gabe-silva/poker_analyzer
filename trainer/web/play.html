@@ -12,7 +12,7 @@
   <div class="page-wrap">
     <header class="top-hero">
       <h1>PokerNow Trainer</h1>
-      <p>Upload PokerNow files, profile friends, compare player groups, and unlock live training on Elite.</p>
+      <p>Upload files, select usernames, and analyze profiles.</p>
       <nav class="top-nav">
         <a href="/index.html" class="nav-link">Plans</a>
         <a href="/setup.html" class="nav-link">Setup</a>
@@ -24,9 +24,11 @@
 
     <main class="play-layout">
       <section class="panel">
-        <h2>Plan & Profile Setup</h2>
+        <h2>Analyzer</h2>
         <div id="planBadge" class="meta-strip"></div>
-        <div id="featureLockNotice" class="lock-banner" style="display:none;"></div>
+        <div class="meta-strip">
+          How to use: Upload files, click <strong>Upload Hand Files</strong>, select username(s), then click <strong>Analyze Selected Profile</strong>.
+        </div>
 
         <div id="modeToggleRow" class="mode-toggle-row">
           <label class="mode-pill">
@@ -50,7 +52,6 @@
           </label>
           <div class="action-row">
             <button id="uploadHandsBtn" class="btn-primary" type="button">Upload Hand Files</button>
-            <button id="refreshPlayersBtn" class="btn-ghost" type="button">Refresh Players</button>
           </div>
           <div id="handsStatus" class="meta-strip">No uploaded hand files yet.</div>
           <label id="startingStackWrap">
