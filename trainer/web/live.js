@@ -22,6 +22,7 @@ const state = {
   compareLookup: {
     byText: new Map(),
     bySelectionKey: new Set(),
+    bySelectionKeyDisplay: new Map(),
   },
 };
 
@@ -413,6 +414,7 @@ function renderComparePlayerChoices(players) {
   if (!els.comparePlayerList) return;
   const byText = new Map();
   const bySelectionKey = new Set();
+  const bySelectionKeyDisplay = new Map();
   const items = [];
   for (const row of players || []) {
     const selectionKey = String(row?.selection_key || "").trim();
@@ -422,6 +424,7 @@ function renderComparePlayerChoices(players) {
     const handsSeen = Number(row?.hands_seen || 0);
     items.push({ selectionKey, displayName, handsSeen });
     bySelectionKey.add(selectionKey);
+    bySelectionKeyDisplay.set(selectionKey, displayName);
     byText.set(displayName.toLowerCase(), selectionKey);
     byText.set(selectionKey.toLowerCase(), selectionKey);
     const aliases = Array.isArray(row?.usernames) ? row.usernames : [];
@@ -446,7 +449,7 @@ function renderComparePlayerChoices(players) {
     .map((item) => `<option value="${escapeHtml(item.displayName)}"></option>`)
     .join("");
 
-  state.compareLookup = { byText, bySelectionKey };
+  state.compareLookup = { byText, bySelectionKey, bySelectionKeyDisplay };
 }
 
 function renderHandsStatus(status) {
@@ -609,9 +612,12 @@ async function compareProfileGroups() {
     if (playerA === playerB) {
       throw new Error("Player A and Player B must be different.");
     }
+    const labelMap = state.compareLookup?.bySelectionKeyDisplay;
+    const labelA = (labelMap && labelMap.get(playerA)) || String(els.comparePlayerA?.value || "").trim() || "Player A";
+    const labelB = (labelMap && labelMap.get(playerB)) || String(els.comparePlayerB?.value || "").trim() || "Player B";
     const groups = [
-      { label: "Player A", usernames: [playerA] },
-      { label: "Player B", usernames: [playerB] },
+      { label: labelA, usernames: [playerA] },
+      { label: labelB, usernames: [playerB] },
     ];
     const maxGroups = maxCompareGroups();
     if (groups.length > maxGroups) {
