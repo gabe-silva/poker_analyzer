@@ -68,7 +68,7 @@ function renderFeatureLockNotice() {
   }
   els.featureLockNotice.style.display = "block";
   els.featureLockNotice.textContent =
-    "Live play and single-hand drills are Elite features. Free/Pro can upload hands, profile players, and run analysis.";
+    "Train against specific friends is Elite-only. Pro can still train by style from Setup/Trainer and use all analyzer tools.";
 }
 
 async function bootstrap() {
@@ -93,7 +93,9 @@ async function bootstrap() {
     "trainingStyleWrap",
     "trainingStyle",
     "handsStatus",
+    "startingStackWrap",
     "startingStackBb",
+    "liveSeedWrap",
     "liveSeed",
     "targetedMode",
     "targetedModeWrap",
@@ -235,6 +237,10 @@ function applyPlanLocks() {
   if (els.fullModePanel) els.fullModePanel.style.display = liveAllowed ? "block" : "none";
   if (els.drillModePanel) els.drillModePanel.style.display = "none";
   if (els.trainingStyleWrap) els.trainingStyleWrap.style.display = liveAllowed ? "flex" : "none";
+  if (els.startingStackWrap) els.startingStackWrap.style.display = liveAllowed ? "flex" : "none";
+  if (els.liveSeedWrap) els.liveSeedWrap.style.display = liveAllowed ? "flex" : "none";
+  if (els.startingStackBb) els.startingStackBb.disabled = !liveAllowed;
+  if (els.liveSeed) els.liveSeed.disabled = !liveAllowed;
   if (!liveAllowed) {
     state.playMode = "full_match";
     if (els.playModeFull) els.playModeFull.checked = true;

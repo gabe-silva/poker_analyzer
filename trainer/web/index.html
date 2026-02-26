@@ -166,35 +166,6 @@
         </div>
       </section>
 
-      <section class="panel">
-        <h2>Screenshot Setup Checklist</h2>
-        <ol class="landing-steps">
-          <li>Capture your UI screenshots locally and name them exactly as shown above.</li>
-          <li>Copy them into <code>trainer/web/screenshots/</code>.</li>
-          <li>Commit and push to GitHub, then pull on PythonAnywhere and reload the web app.</li>
-        </ol>
-        <pre class="snippet-block"># local (VS Code terminal)
-cd /Users/gabe/Desktop/poker_analyzer
-git add trainer/web/index.html trainer/web/styles.css trainer/web/screenshots/
-git commit -m "Update tier messaging and landing screenshot gallery"
-git push origin main
-
-# PythonAnywhere bash
-workon poker-analyzer
-cd ~/poker_analyzer
-git pull origin main
-# then click "Reload" on the PythonAnywhere Web tab
-</pre>
-      </section>
-
-      <section class="panel">
-        <h2>Tier Boundaries</h2>
-        <ul class="landing-list">
-          <li>Free: analyzer only, one profile bucket, no exploit panel.</li>
-          <li>Pro: analyzer + exploit panel + style-based training in Setup/Trainer.</li>
-          <li>Elite: friend-specific training (live/drill) unlocked on Play page.</li>
-        </ul>
-      </section>
     </main>
   </div>
 </body>
