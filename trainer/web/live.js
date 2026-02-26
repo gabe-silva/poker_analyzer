@@ -81,6 +81,7 @@ async function bootstrap() {
     "comparePlayerList",
     "comparisonPanel",
     "comparisonDashboard",
+    "profilePanel",
     "profileDashboard",
     "trainingStyleWrap",
     "trainingStyle",
@@ -117,6 +118,7 @@ async function bootstrap() {
     "drillFeedbackSummary",
     "drillEvTableWrap",
     "drillLeakBreakdownWrap",
+    "matchNotesPanel",
     "opponentSummary",
     "statusLine",
   ]);
@@ -139,6 +141,7 @@ async function bootstrap() {
   bindEvents();
   renderPlanBadge();
   applyPlanLocks();
+  setOutputView("none");
   try {
     await refreshHandsPlayers(false);
   } catch {
@@ -213,6 +216,7 @@ function initControls(config) {
   }
 
   updateTargetModeUi();
+  updateSetupDraftUi();
 }
 
 function applyPlanLocks() {
@@ -225,7 +229,7 @@ function applyPlanLocks() {
   if (els.targetConfigWrap) els.targetConfigWrap.style.display = liveAllowed ? "block" : "none";
   if (els.fullModeActions) els.fullModeActions.style.display = liveAllowed ? "flex" : "none";
   if (els.drillModeActions) els.drillModeActions.style.display = "none";
-  if (els.fullModePanel) els.fullModePanel.style.display = liveAllowed ? "block" : "none";
+  if (els.fullModePanel) els.fullModePanel.style.display = "none";
   if (els.drillModePanel) els.drillModePanel.style.display = "none";
   if (els.trainingStyleWrap) els.trainingStyleWrap.style.display = liveAllowed ? "flex" : "none";
   if (els.startingStackWrap) els.startingStackWrap.style.display = liveAllowed ? "flex" : "none";
@@ -242,10 +246,10 @@ function applyPlanLocks() {
     els.compareProfilesBtn.style.display = compareAllowed ? "inline-flex" : "none";
   }
   if (els.compareConfig) {
-    els.compareConfig.style.display = compareAllowed ? "block" : "none";
+    els.compareConfig.style.display = "none";
   }
-  if (els.comparisonPanel) {
-    els.comparisonPanel.style.display = compareAllowed ? "block" : "none";
+  if (els.comparisonPanel && !compareAllowed) {
+    els.comparisonPanel.style.display = "none";
   }
 }
 
@@ -262,10 +266,14 @@ function bindEvents() {
   }
 
   els.targetedMode.addEventListener("change", updateTargetModeUi);
+  els.useSetupDraft.addEventListener("change", updateSetupDraftUi);
   els.uploadHandsBtn.addEventListener("click", uploadHandsFiles);
   els.analyzeProfileBtn.addEventListener("click", analyzeSelectedProfile);
   if (els.compareProfilesBtn) {
-    els.compareProfilesBtn.addEventListener("click", compareProfileGroups);
+    els.compareProfilesBtn.addEventListener("click", () => {
+      toggleCompareConfig(true);
+      compareProfileGroups();
+    });
   }
 
   els.startLiveBtn.addEventListener("click", startLiveMatch);
@@ -293,35 +301,37 @@ function updateModeUi() {
   if (!featureEnabled("allow_live_training")) {
     if (els.fullModeActions) els.fullModeActions.style.display = "none";
     if (els.drillModeActions) els.drillModeActions.style.display = "none";
-    if (els.fullModePanel) els.fullModePanel.style.display = "none";
-    if (els.drillModePanel) els.drillModePanel.style.display = "none";
+    setOutputView("none");
     return;
   }
   const full = state.playMode === "full_match";
 
   if (els.fullModeActions) els.fullModeActions.style.display = full ? "flex" : "none";
   if (els.drillModeActions) els.drillModeActions.style.display = full ? "none" : "flex";
-  if (els.fullModePanel) els.fullModePanel.style.display = full ? "block" : "none";
-  if (els.drillModePanel) els.drillModePanel.style.display = full ? "none" : "block";
-
   if (els.targetedModeWrap) els.targetedModeWrap.style.display = full ? "inline-flex" : "none";
   if (els.targetedMode) els.targetedMode.disabled = !full;
 
   updateTargetModeUi();
+  updateSetupDraftUi();
+  toggleCompareConfig(false);
 
   if (full) {
     if (state.session) {
+      setOutputView("live");
       renderLiveOpponentSummary(state.session.match?.opponent || {}, state.session.hand || {});
     } else {
+      setOutputView("none");
       els.opponentSummary.textContent = "Opponent summary appears after match start.";
-      setStatus("Full Match mode selected. Upload hands and select friend usernames to start.");
+      setStatus("Full Match mode selected. Upload hands, choose friend username(s), then click Start Match.");
     }
   } else {
     if (state.drillOpponentProfile) {
+      setOutputView("drill");
       renderDrillOpponentSummary(state.drillOpponentProfile, state.drillMappedArchetype, state.drillScenario);
     } else {
+      setOutputView("none");
       els.opponentSummary.textContent = "Opponent summary appears after drill hand generation.";
-      setStatus("Single Hand Drill mode selected. Generate a hand for EV and leak feedback.");
+      setStatus("Single Hand Drill mode selected. Choose setup options, then click Start Drill.");
     }
   }
 }
@@ -331,6 +341,61 @@ function updateTargetModeUi() {
   const enabled = full ? !!els.targetedMode.checked : true;
   if (els.targetConfigWrap) {
     els.targetConfigWrap.style.display = enabled ? "block" : "none";
+  }
+}
+
+function toggleCompareConfig(show) {
+  if (!els.compareConfig) return;
+  const compareAllowed = featureEnabled("allow_multi_profile_compare");
+  els.compareConfig.style.display = show && compareAllowed ? "block" : "none";
+}
+
+function updateSetupDraftUi() {
+  if (!featureEnabled("allow_live_training")) return;
+  const usingDraft = !!els.useSetupDraft?.checked;
+  let appliedDraft = false;
+  const controls = [els.tStreet, els.tNodeType, els.tActionContext, els.tHeroPosition, els.trainingStyle];
+  if (usingDraft) {
+    const draft = loadSetupDraft();
+    if (draft) {
+      appliedDraft = true;
+      if (draft.street && els.tStreet) els.tStreet.value = draft.street;
+      if (draft.node_type && els.tNodeType) els.tNodeType.value = draft.node_type;
+      if (draft.action_context && els.tActionContext) els.tActionContext.value = draft.action_context;
+      if (draft.hero_position && els.tHeroPosition) {
+        els.tHeroPosition.value = normalizeHeadsUpPosition(draft.hero_position);
+      }
+      if (draft.hero_training_style && els.trainingStyle) {
+        const optionExists = Array.from(els.trainingStyle.options || []).some(
+          (opt) => opt.value === String(draft.hero_training_style),
+        );
+        if (optionExists) {
+          els.trainingStyle.value = String(draft.hero_training_style);
+        }
+      }
+    }
+  }
+  controls.forEach((node) => {
+    if (!node) return;
+    node.disabled = usingDraft && appliedDraft;
+  });
+}
+
+function setOutputView(view) {
+  const liveAllowed = featureEnabled("allow_live_training");
+  const compareAllowed = featureEnabled("allow_multi_profile_compare");
+  if (els.profilePanel) els.profilePanel.style.display = view === "profile" ? "block" : "none";
+  if (els.comparisonPanel) {
+    els.comparisonPanel.style.display = view === "compare" && compareAllowed ? "block" : "none";
+  }
+  if (els.fullModePanel) {
+    els.fullModePanel.style.display = view === "live" && liveAllowed ? "block" : "none";
+  }
+  if (els.drillModePanel) {
+    els.drillModePanel.style.display = view === "drill" && liveAllowed ? "block" : "none";
+  }
+  if (els.matchNotesPanel) {
+    els.matchNotesPanel.style.display = (view === "live" || view === "drill") && liveAllowed ? "block" : "none";
   }
 }
 
@@ -588,10 +653,13 @@ function renderComparisonDashboard(profiles) {
 
 async function analyzeSelectedProfile() {
   try {
+    toggleCompareConfig(false);
+    setOutputView("none");
     setStatus("Building profile dashboard...");
     const profile = await resolveOpponentProfile();
     state.analyzedProfile = profile;
     renderSingleProfileDashboard(profile);
+    setOutputView("profile");
     setStatus("Profile analysis ready.");
   } catch (err) {
     setStatus(`Could not analyze profile: ${err.message}`, true);
@@ -604,6 +672,8 @@ async function compareProfileGroups() {
     return;
   }
   try {
+    toggleCompareConfig(true);
+    setOutputView("none");
     const playerA = resolveComparePlayerInput(els.comparePlayerA?.value);
     const playerB = resolveComparePlayerInput(els.comparePlayerB?.value);
     if (!playerA || !playerB) {
@@ -627,6 +697,7 @@ async function compareProfileGroups() {
     const result = await apiPost("/api/opponent/compare", { groups });
     state.comparedProfiles = result.profiles || [];
     renderComparisonDashboard(state.comparedProfiles);
+    setOutputView("compare");
     setStatus("Comparison ready.");
   } catch (err) {
     setStatus(`Could not compare players: ${err.message}`, true);
@@ -741,7 +812,14 @@ function buildDrillPayload(profile, mapped) {
   if (seedText) {
     payload.seed = Number(seedText);
   }
-  const trainingStyle = String(els.trainingStyle?.value || "balanced_default").trim();
+  let trainingStyle = String(els.trainingStyle?.value || "balanced_default").trim();
+  if (els.useSetupDraft?.checked) {
+    const draft = loadSetupDraft();
+    const draftStyle = String(draft?.hero_training_style || "").trim();
+    if (draftStyle) {
+      trainingStyle = draftStyle;
+    }
+  }
   const heroProfile = heroProfileFromTrainingStyle(trainingStyle);
   if (heroProfile) {
     payload.hero_profile = heroProfile;
@@ -755,6 +833,8 @@ async function startLiveMatch() {
     return;
   }
   try {
+    toggleCompareConfig(false);
+    setOutputView("none");
     setStatus("Starting live match...");
     const selectedNames = getSelectedAnalyzerPlayers();
     if (!selectedNames.length) {
@@ -799,6 +879,9 @@ async function nextHand() {
 
 function renderLiveState(data) {
   state.session = data;
+  if (state.playMode === "full_match") {
+    setOutputView("live");
+  }
   const m = data.match || {};
   const h = data.hand || {};
   const opponent = m.opponent || {};
@@ -1004,6 +1087,8 @@ async function startDrillHand() {
     return;
   }
   try {
+    toggleCompareConfig(false);
+    setOutputView("none");
     setStatus("Generating profile drill hand...");
     const opponentProfile = await resolveOpponentProfile();
     const mappedArchetype = mapProfileToArchetype(opponentProfile);
@@ -1024,6 +1109,7 @@ async function startDrillHand() {
 }
 
 function renderDrillScenario(s) {
+  setOutputView("drill");
   const mapped = state.drillMappedArchetype;
   els.drillMeta.textContent =
     `ID ${s.scenario_id} | ${titleCase(s.street)} | ${titleCase(s.node_type.replaceAll("_", " "))} | ` +

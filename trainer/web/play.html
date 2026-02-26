@@ -12,7 +12,7 @@
   <div class="page-wrap">
     <header class="top-hero">
       <h1>PokerNow Trainer</h1>
-      <p>Upload files, select usernames, and analyze profiles.</p>
+      <p>Choose one task at a time: analyze, compare, or train.</p>
       <nav class="top-nav">
         <a href="/index.html" class="nav-link">Plans</a>
         <a href="/setup.html" class="nav-link">Setup</a>
@@ -28,6 +28,15 @@
         <div id="planBadge" class="meta-strip"></div>
         <div class="meta-strip">
           How to use: Upload files, click <strong>Upload Hand Files</strong>, select username(s), then click <strong>Analyze Selected Profile</strong>.
+        </div>
+        <div class="hero-profile-block quick-guide">
+          <h3>Action Guide</h3>
+          <ol class="play-guide-list">
+            <li><strong>Analyze Selected Profile</strong>: one player dashboard.</li>
+            <li><strong>Compare Two Players</strong>: side-by-side comparison.</li>
+            <li><strong>Start Drill</strong>: one-hand personal training flow.</li>
+            <li><strong>Start Match</strong>: play full hand progression vs selected friend profile.</li>
+          </ol>
         </div>
 
         <div id="modeToggleRow" class="mode-toggle-row">
@@ -62,10 +71,6 @@
             Random Seed (optional)
             <input id="liveSeed" type="number" min="1" step="1" placeholder="auto" />
           </label>
-          <label id="trainingStyleWrap" style="display:none;">
-            Training Style For Hero
-            <select id="trainingStyle"></select>
-          </label>
         </div>
 
         <div class="action-row">
@@ -98,6 +103,9 @@
             <span>Use Setup Page Draft For Targeted Spot</span>
           </label>
         </div>
+        <div class="meta-strip">
+          Setup options: enable <strong>Use Setup Page Draft</strong> to pull saved street/node/action/hero-position defaults from Setup.
+        </div>
 
         <div id="targetConfigWrap" class="hero-profile-block">
           <h3>Targeted Spot Controls</h3>
@@ -106,6 +114,10 @@
             <label>Node Type<select id="tNodeType"></select></label>
             <label>Action Context<select id="tActionContext"></select></label>
             <label>Hero Position<select id="tHeroPosition"></select></label>
+            <label id="trainingStyleWrap">
+              Training Style For Hero
+              <select id="trainingStyle"></select>
+            </label>
           </div>
         </div>
 
@@ -121,17 +133,17 @@
         </div>
       </section>
 
-      <section class="panel">
+      <section id="profilePanel" class="panel" style="display:none;">
         <h2>Profile Dashboard</h2>
         <div id="profileDashboard" class="feedback-summary">Analyze a selected profile to see stats.</div>
       </section>
 
-      <section class="panel" id="comparisonPanel">
+      <section class="panel" id="comparisonPanel" style="display:none;">
         <h2>Two-Player Comparison</h2>
         <div id="comparisonDashboard" class="feedback-summary">Pick Player A and Player B, then click Compare Two Players.</div>
       </section>
 
-      <section id="fullModePanel" class="panel">
+      <section id="fullModePanel" class="panel" style="display:none;">
         <h2>Live Table</h2>
         <div id="liveMeta" class="meta-strip">No live session yet.</div>
         <div id="balanceTracker" class="hero-profile-block">Balance tracker appears after match start.</div>
@@ -150,7 +162,7 @@
         <div id="drillLeakBreakdownWrap"></div>
       </section>
 
-      <section class="panel">
+      <section id="matchNotesPanel" class="panel" style="display:none;">
         <h2>Match Notes</h2>
         <div id="opponentSummary" class="feedback-summary">Opponent summary appears after match start.</div>
       </section>
