@@ -6,6 +6,7 @@ const state = {
   config: null,
   auth: null,
   plan: null,
+  trainingWorkspace: false,
   playMode: "full_match",
   session: null,
   liveSelectedAction: null,
@@ -54,6 +55,15 @@ function maxCompareGroups() {
   return Number(currentPlan().max_compare_groups || 1);
 }
 
+function workspaceMode() {
+  const params = new URLSearchParams(window.location.search);
+  return String(params.get("workspace") || "").trim().toLowerCase();
+}
+
+function isTrainingWorkspace() {
+  return workspaceMode() === "training";
+}
+
 function renderPlanBadge() {
   if (!els.planBadge) return;
   const plan = currentPlan();
@@ -64,8 +74,43 @@ function renderPlanBadge() {
   els.planBadge.textContent = `Plan: ${label} (${tier}) | Upload cap: ${handLimit} total hands | ${exploitText}`;
 }
 
+function applyWorkspacePresentation() {
+  const training = !!state.trainingWorkspace;
+
+  if (els.navAnalyzerLink) {
+    els.navAnalyzerLink.classList.toggle("active", !training);
+  }
+  if (els.navTrainerLink) {
+    els.navTrainerLink.classList.toggle("active", training);
+  }
+  if (els.playWorkspaceTitle) {
+    els.playWorkspaceTitle.textContent = training ? "Friend Training Workspace" : "Analyzer";
+  }
+  if (els.playWorkspaceSubtitle) {
+    els.playWorkspaceSubtitle.textContent = training
+      ? "Trainer workspace: run Elite friend matches from uploaded player profiles."
+      : "Analyze profile stats and compare players side-by-side.";
+  }
+  if (els.analyzerGuide) {
+    els.analyzerGuide.style.display = training ? "none" : "block";
+  }
+  if (els.analyzerActionGuide) {
+    els.analyzerActionGuide.style.display = training ? "none" : "block";
+  }
+  if (els.trainingWorkspaceNotice) {
+    els.trainingWorkspaceNotice.style.display = training ? "block" : "none";
+  }
+}
+
 async function bootstrap() {
   mapIds([
+    "navAnalyzerLink",
+    "navTrainerLink",
+    "playWorkspaceTitle",
+    "playWorkspaceSubtitle",
+    "analyzerGuide",
+    "analyzerActionGuide",
+    "trainingWorkspaceNotice",
     "planBadge",
     "modeToggleRow",
     "playModeFull",
@@ -75,6 +120,7 @@ async function bootstrap() {
     "analyzerPlayers",
     "analyzeProfileBtn",
     "compareProfilesBtn",
+    "analysisActionsRow",
     "compareConfig",
     "comparePlayerA",
     "comparePlayerB",
@@ -137,7 +183,9 @@ async function bootstrap() {
 
   const config = await apiGet("/api/config");
   state.config = config;
+  state.trainingWorkspace = isTrainingWorkspace();
   initControls(config);
+  applyWorkspacePresentation();
   bindEvents();
   renderPlanBadge();
   applyPlanLocks();
@@ -148,15 +196,10 @@ async function bootstrap() {
     // Keep booting; user can retry refresh/upload manually.
   }
 
-  const savedMode = localStorage.getItem(PLAY_MODE_KEY);
-  if (savedMode === "single_hand_drill") {
-    setPlayMode("single_hand_drill");
-  } else {
-    setPlayMode("full_match");
-  }
+  setPlayMode("full_match");
 
   const existing = localStorage.getItem(LIVE_SESSION_KEY);
-  if (existing && featureEnabled("allow_live_training")) {
+  if (existing && featureEnabled("allow_live_training") && state.trainingWorkspace) {
     try {
       const restored = await apiGet(`/api/live/state?session_id=${encodeURIComponent(existing)}`);
       renderLiveState(restored);
@@ -166,17 +209,21 @@ async function bootstrap() {
     } catch {
       localStorage.removeItem(LIVE_SESSION_KEY);
     }
-  } else if (!featureEnabled("allow_live_training")) {
+  } else if (!featureEnabled("allow_live_training") || !state.trainingWorkspace) {
     localStorage.removeItem(LIVE_SESSION_KEY);
   }
 
-  if (!featureEnabled("allow_live_training")) {
-    setStatus("Ready. Upload files, click Upload Hand Files, select username(s), then Analyze Selected Profile.");
-  } else if (!state.session && state.playMode === "full_match") {
-    setStatus("Ready. Upload hand files and select friend usernames for full match mode.");
+  if (!state.trainingWorkspace) {
+    setStatus(
+      "Ready. Upload files, click Upload Hand Files, select username(s), then Analyze Selected Profile. Friend training is in Trainer.",
+    );
+    return;
   }
-  if (!state.drillScenario && state.playMode === "single_hand_drill") {
-    setStatus("Ready. Start a single-hand drill for full EV feedback.");
+
+  if (!featureEnabled("allow_live_training")) {
+    setStatus("Upgrade to Elite to use Friend Training workspace.", true);
+  } else if (!state.session) {
+    setStatus("Ready. Upload hand files, select friend username(s), then click Start Match.");
   }
 }
 
@@ -222,34 +269,48 @@ function initControls(config) {
 function applyPlanLocks() {
   const liveAllowed = featureEnabled("allow_live_training");
   const compareAllowed = featureEnabled("allow_multi_profile_compare");
+  const trainingWorkspace = !!state.trainingWorkspace;
+  const trainingVisible = liveAllowed && trainingWorkspace;
 
-  if (els.modeToggleRow) els.modeToggleRow.style.display = liveAllowed ? "flex" : "none";
-  if (els.targetedModeWrap) els.targetedModeWrap.style.display = liveAllowed ? "inline-flex" : "none";
-  if (els.useSetupDraftWrap) els.useSetupDraftWrap.style.display = liveAllowed ? "inline-flex" : "none";
-  if (els.targetConfigWrap) els.targetConfigWrap.style.display = liveAllowed ? "block" : "none";
-  if (els.fullModeActions) els.fullModeActions.style.display = liveAllowed ? "flex" : "none";
+  if (els.modeToggleRow) els.modeToggleRow.style.display = "none";
+  if (els.targetedModeWrap) els.targetedModeWrap.style.display = trainingVisible ? "inline-flex" : "none";
+  if (els.useSetupDraftWrap) els.useSetupDraftWrap.style.display = trainingVisible ? "inline-flex" : "none";
+  if (els.targetConfigWrap) els.targetConfigWrap.style.display = trainingVisible ? "block" : "none";
+  if (els.fullModeActions) els.fullModeActions.style.display = trainingVisible ? "flex" : "none";
   if (els.drillModeActions) els.drillModeActions.style.display = "none";
   if (els.fullModePanel) els.fullModePanel.style.display = "none";
   if (els.drillModePanel) els.drillModePanel.style.display = "none";
-  if (els.trainingStyleWrap) els.trainingStyleWrap.style.display = liveAllowed ? "flex" : "none";
-  if (els.startingStackWrap) els.startingStackWrap.style.display = liveAllowed ? "flex" : "none";
-  if (els.liveSeedWrap) els.liveSeedWrap.style.display = liveAllowed ? "flex" : "none";
-  if (els.startingStackBb) els.startingStackBb.disabled = !liveAllowed;
-  if (els.liveSeed) els.liveSeed.disabled = !liveAllowed;
-  if (!liveAllowed) {
+  if (els.matchNotesPanel) els.matchNotesPanel.style.display = "none";
+  if (els.trainingStyleWrap) els.trainingStyleWrap.style.display = trainingVisible ? "flex" : "none";
+  if (els.startingStackWrap) els.startingStackWrap.style.display = trainingVisible ? "flex" : "none";
+  if (els.liveSeedWrap) els.liveSeedWrap.style.display = trainingVisible ? "flex" : "none";
+  if (els.startingStackBb) els.startingStackBb.disabled = !trainingVisible;
+  if (els.liveSeed) els.liveSeed.disabled = !trainingVisible;
+
+  if (els.analysisActionsRow) {
+    els.analysisActionsRow.style.display = trainingWorkspace ? "none" : "flex";
+  }
+  if (els.compareConfig) {
+    els.compareConfig.style.display = "none";
+  }
+
+  if (!trainingVisible) {
     state.playMode = "full_match";
     if (els.playModeFull) els.playModeFull.checked = true;
     if (els.playModeDrill) els.playModeDrill.checked = false;
   }
 
   if (els.compareProfilesBtn) {
-    els.compareProfilesBtn.style.display = compareAllowed ? "inline-flex" : "none";
+    els.compareProfilesBtn.style.display = !trainingWorkspace && compareAllowed ? "inline-flex" : "none";
   }
-  if (els.compareConfig) {
-    els.compareConfig.style.display = "none";
+  if (els.profilePanel && trainingWorkspace) {
+    els.profilePanel.style.display = "none";
   }
-  if (els.comparisonPanel && !compareAllowed) {
-    els.comparisonPanel.style.display = "none";
+  if (els.targetedMode) {
+    els.targetedMode.disabled = !trainingVisible;
+  }
+  if (els.useSetupDraft) {
+    els.useSetupDraft.disabled = !trainingVisible;
   }
 }
 
@@ -265,8 +326,12 @@ function bindEvents() {
     });
   }
 
-  els.targetedMode.addEventListener("change", updateTargetModeUi);
-  els.useSetupDraft.addEventListener("change", updateSetupDraftUi);
+  if (els.targetedMode) {
+    els.targetedMode.addEventListener("change", updateTargetModeUi);
+  }
+  if (els.useSetupDraft) {
+    els.useSetupDraft.addEventListener("change", updateSetupDraftUi);
+  }
   els.uploadHandsBtn.addEventListener("click", uploadHandsFiles);
   els.analyzeProfileBtn.addEventListener("click", analyzeSelectedProfile);
   if (els.compareProfilesBtn) {
@@ -276,14 +341,16 @@ function bindEvents() {
     });
   }
 
-  els.startLiveBtn.addEventListener("click", startLiveMatch);
-  els.nextHandBtn.addEventListener("click", nextHand);
-  els.startDrillBtn.addEventListener("click", startDrillHand);
-  els.newDrillBtn.addEventListener("click", startDrillHand);
+  if (state.trainingWorkspace) {
+    els.startLiveBtn.addEventListener("click", startLiveMatch);
+    els.nextHandBtn.addEventListener("click", nextHand);
+    els.startDrillBtn.addEventListener("click", startDrillHand);
+    els.newDrillBtn.addEventListener("click", startDrillHand);
+  }
 }
 
 function setPlayMode(mode) {
-  if (!featureEnabled("allow_live_training")) {
+  if (!featureEnabled("allow_live_training") || !state.trainingWorkspace) {
     state.playMode = "full_match";
     if (els.playModeFull) els.playModeFull.checked = true;
     if (els.playModeDrill) els.playModeDrill.checked = false;
@@ -298,9 +365,12 @@ function setPlayMode(mode) {
 }
 
 function updateModeUi() {
-  if (!featureEnabled("allow_live_training")) {
+  if (!featureEnabled("allow_live_training") || !state.trainingWorkspace) {
     if (els.fullModeActions) els.fullModeActions.style.display = "none";
     if (els.drillModeActions) els.drillModeActions.style.display = "none";
+    if (els.targetedModeWrap) els.targetedModeWrap.style.display = "none";
+    if (els.useSetupDraftWrap) els.useSetupDraftWrap.style.display = "none";
+    if (els.targetConfigWrap) els.targetConfigWrap.style.display = "none";
     setOutputView("none");
     return;
   }
@@ -337,6 +407,12 @@ function updateModeUi() {
 }
 
 function updateTargetModeUi() {
+  if (!state.trainingWorkspace) {
+    if (els.targetConfigWrap) {
+      els.targetConfigWrap.style.display = "none";
+    }
+    return;
+  }
   const full = state.playMode === "full_match";
   const enabled = full ? !!els.targetedMode.checked : true;
   if (els.targetConfigWrap) {
@@ -351,7 +427,7 @@ function toggleCompareConfig(show) {
 }
 
 function updateSetupDraftUi() {
-  if (!featureEnabled("allow_live_training")) return;
+  if (!featureEnabled("allow_live_training") || !state.trainingWorkspace) return;
   const usingDraft = !!els.useSetupDraft?.checked;
   let appliedDraft = false;
   const controls = [els.tStreet, els.tNodeType, els.tActionContext, els.tHeroPosition, els.trainingStyle];
@@ -384,18 +460,20 @@ function updateSetupDraftUi() {
 function setOutputView(view) {
   const liveAllowed = featureEnabled("allow_live_training");
   const compareAllowed = featureEnabled("allow_multi_profile_compare");
+  const trainingWorkspace = !!state.trainingWorkspace;
   if (els.profilePanel) els.profilePanel.style.display = view === "profile" ? "block" : "none";
   if (els.comparisonPanel) {
     els.comparisonPanel.style.display = view === "compare" && compareAllowed ? "block" : "none";
   }
   if (els.fullModePanel) {
-    els.fullModePanel.style.display = view === "live" && liveAllowed ? "block" : "none";
+    els.fullModePanel.style.display = view === "live" && liveAllowed && trainingWorkspace ? "block" : "none";
   }
   if (els.drillModePanel) {
-    els.drillModePanel.style.display = view === "drill" && liveAllowed ? "block" : "none";
+    els.drillModePanel.style.display = view === "drill" && liveAllowed && trainingWorkspace ? "block" : "none";
   }
   if (els.matchNotesPanel) {
-    els.matchNotesPanel.style.display = (view === "live" || view === "drill") && liveAllowed ? "block" : "none";
+    els.matchNotesPanel.style.display =
+      (view === "live" || view === "drill") && liveAllowed && trainingWorkspace ? "block" : "none";
   }
 }
 
@@ -652,6 +730,10 @@ function renderComparisonDashboard(profiles) {
 }
 
 async function analyzeSelectedProfile() {
+  if (state.trainingWorkspace) {
+    setStatus("Analyzer actions are in Analyzer tab. Use Start Match here for friend training.");
+    return;
+  }
   try {
     toggleCompareConfig(false);
     setOutputView("none");
@@ -667,6 +749,10 @@ async function analyzeSelectedProfile() {
 }
 
 async function compareProfileGroups() {
+  if (state.trainingWorkspace) {
+    setStatus("Two-player compare is in Analyzer tab.");
+    return;
+  }
   if (!featureEnabled("allow_multi_profile_compare")) {
     setStatus("Upgrade to Pro to compare multiple profiles.", true);
     return;
@@ -828,6 +914,10 @@ function buildDrillPayload(profile, mapped) {
 }
 
 async function startLiveMatch() {
+  if (!state.trainingWorkspace) {
+    setStatus("Friend training is available from Trainer tab only.", true);
+    return;
+  }
   if (!featureEnabled("allow_live_training")) {
     setStatus("Upgrade to Elite to start live matches.", true);
     return;
@@ -859,6 +949,10 @@ async function startLiveMatch() {
 }
 
 async function nextHand() {
+  if (!state.trainingWorkspace) {
+    setStatus("Open Friend Training from Trainer tab to continue a match.", true);
+    return;
+  }
   if (!featureEnabled("allow_live_training")) {
     setStatus("Upgrade to Elite to use live hand progression.", true);
     return;
@@ -1041,6 +1135,10 @@ function renderLiveActions(hand) {
 }
 
 async function submitLiveAction() {
+  if (!state.trainingWorkspace) {
+    setStatus("Open Friend Training from Trainer tab to submit actions.", true);
+    return;
+  }
   if (!featureEnabled("allow_live_training")) {
     setStatus("Upgrade to Elite to submit live actions.", true);
     return;
@@ -1082,6 +1180,10 @@ async function submitLiveAction() {
 }
 
 async function startDrillHand() {
+  if (!state.trainingWorkspace) {
+    setStatus("Drill actions are only available in Friend Training workspace.", true);
+    return;
+  }
   if (!featureEnabled("allow_live_training")) {
     setStatus("Upgrade to Elite to generate drill hands.", true);
     return;
@@ -1269,6 +1371,10 @@ function updateDrillDecisionButtonStates() {
 }
 
 async function submitDrillDecision() {
+  if (!state.trainingWorkspace) {
+    setStatus("Drill actions are only available in Friend Training workspace.", true);
+    return;
+  }
   if (!featureEnabled("allow_live_training")) {
     setStatus("Upgrade to Elite to submit drill decisions.", true);
     return;

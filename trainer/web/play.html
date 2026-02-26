@@ -12,30 +12,37 @@
   <div class="page-wrap">
     <header class="top-hero">
       <h1>PokerNow Trainer</h1>
-      <p>Choose one task at a time: analyze, compare, or train.</p>
+      <p id="playWorkspaceSubtitle">Analyze profile stats and compare players side-by-side.</p>
       <nav class="top-nav">
         <a href="/index.html" class="nav-link">Plans</a>
-        <a href="/play.html" class="nav-link active">Analyzer</a>
+        <a id="navAnalyzerLink" href="/play.html" class="nav-link active">Analyzer</a>
         <a href="/setup.html" class="nav-link">Setup</a>
-        <a href="/trainer.html" class="nav-link">Trainer</a>
+        <a id="navTrainerLink" href="/trainer.html" class="nav-link">Trainer</a>
         <a href="/login.html" class="nav-link">Account</a>
       </nav>
     </header>
 
     <main class="play-layout">
       <section class="panel">
-        <h2>Analyzer</h2>
+        <h2 id="playWorkspaceTitle">Analyzer</h2>
         <div id="planBadge" class="meta-strip"></div>
-        <div class="meta-strip">
+        <div id="analyzerGuide" class="meta-strip">
           How to use: Upload files, click <strong>Upload Hand Files</strong>, select username(s), then click <strong>Analyze Selected Profile</strong>.
         </div>
-        <div class="hero-profile-block quick-guide">
+        <div id="analyzerActionGuide" class="hero-profile-block quick-guide">
           <h3>Action Guide</h3>
           <ol class="play-guide-list">
             <li><strong>Analyze Selected Profile</strong>: one player dashboard.</li>
             <li><strong>Compare Two Players</strong>: side-by-side comparison.</li>
-            <li><strong>Start Drill</strong>: one-hand personal training flow.</li>
-            <li><strong>Start Match</strong>: play full hand progression vs selected friend profile.</li>
+          </ol>
+        </div>
+        <div id="trainingWorkspaceNotice" class="hero-profile-block quick-guide" style="display:none;">
+          <h3>Elite Friend Training</h3>
+          <ol class="play-guide-list">
+            <li>Upload or refresh hand files to populate player buckets.</li>
+            <li>Select one or more friend usernames from the list.</li>
+            <li>Set targeted spot controls (or use Setup draft values).</li>
+            <li>Click <strong>Start Match</strong> to begin full-hand progression.</li>
           </ol>
         </div>
 
@@ -73,7 +80,7 @@
           </label>
         </div>
 
-        <div class="action-row">
+        <div id="analysisActionsRow" class="action-row">
           <button id="analyzeProfileBtn" class="btn-primary" type="button">Analyze Selected Profile</button>
           <button id="compareProfilesBtn" class="btn-ghost" type="button">Compare Two Players</button>
         </div>
