@@ -156,6 +156,13 @@ class TrainerRequestHandler(SimpleHTTPRequestHandler):
                 self._send_json(self.service.upload_hands(self._read_multipart_files()), status=200)
                 return
             payload = self._read_json_body()
+            if path == "/api/hands/delete":
+                filename = str(payload.get("filename", "")).strip()
+                if not filename:
+                    self._send_json({"error": "filename is required"}, status=400)
+                    return
+                self._send_json(self.service.delete_uploaded_hands_file(filename), status=200)
+                return
             if path == "/api/opponent/compare":
                 groups = payload.get("groups")
                 if not isinstance(groups, list) or not groups:

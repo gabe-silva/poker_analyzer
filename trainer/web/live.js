@@ -156,10 +156,9 @@ async function bootstrap() {
     "trainingStyleWrap",
     "trainingStyle",
     "handsStatus",
+    "uploadedFileList",
     "startingStackWrap",
     "startingStackBb",
-    "liveSeedWrap",
-    "liveSeed",
     "targetedMode",
     "targetedModeWrap",
     "targetConfigWrap",
@@ -304,9 +303,7 @@ function applyPlanLocks() {
   if (els.matchNotesPanel) els.matchNotesPanel.style.display = "none";
   if (els.trainingStyleWrap) els.trainingStyleWrap.style.display = trainingVisible ? "flex" : "none";
   if (els.startingStackWrap) els.startingStackWrap.style.display = trainingVisible ? "flex" : "none";
-  if (els.liveSeedWrap) els.liveSeedWrap.style.display = trainingVisible ? "flex" : "none";
   if (els.startingStackBb) els.startingStackBb.disabled = !trainingVisible;
-  if (els.liveSeed) els.liveSeed.disabled = !trainingVisible;
 
   if (els.analysisActionsRow) {
     els.analysisActionsRow.style.display = trainingWorkspace ? "none" : "flex";
@@ -607,6 +604,7 @@ function renderHandsStatus(status) {
   const totalFiles = Number(status?.total_files || files.length || 0);
   const totalPlayers = Number(status?.total_players || 0);
   const totalHands = Number(status?.total_hands || 0);
+  renderUploadedFileList(files);
   if (!totalFiles) {
     els.handsStatus.textContent = "No uploaded files yet. Upload one or more PokerNow JSON files to build friend profiles.";
     return;
@@ -615,6 +613,48 @@ function renderHandsStatus(status) {
   els.handsStatus.textContent =
     `Uploaded files: ${totalFiles} | Players found: ${totalPlayers} | Hands parsed: ${totalHands}` +
     (recent ? ` | Recent: ${recent}` : "");
+}
+
+function renderUploadedFileList(files) {
+  if (!els.uploadedFileList) return;
+  const list = Array.isArray(files) ? files : [];
+  if (!list.length) {
+    els.uploadedFileList.innerHTML = "";
+    return;
+  }
+  els.uploadedFileList.innerHTML = list
+    .map(
+      (filename) => `
+      <div class="uploaded-file-row">
+        <span class="uploaded-file-name">${escapeHtml(filename)}</span>
+        <button class="btn-danger-soft" type="button" data-filename="${escapeHtml(filename)}">Remove</button>
+      </div>
+    `,
+    )
+    .join("");
+
+  els.uploadedFileList.querySelectorAll("button[data-filename]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      await deleteUploadedFile(btn.getAttribute("data-filename") || "");
+    });
+  });
+}
+
+async function deleteUploadedFile(filename) {
+  const cleanName = String(filename || "").trim();
+  if (!cleanName) {
+    setStatus("Could not remove file: invalid filename.", true);
+    return;
+  }
+  try {
+    setStatus(`Removing ${cleanName}...`);
+    const status = await apiPost("/api/hands/delete", { filename: cleanName });
+    fillAnalyzerPlayerSelect(status.players || [], true);
+    renderHandsStatus(status);
+    setStatus(`Removed ${cleanName}.`);
+  } catch (err) {
+    setStatus(`Could not remove file: ${err.message}`, true);
+  }
 }
 
 async function refreshHandsPlayers(showStatus = true) {
@@ -901,10 +941,6 @@ function buildDrillPayload(profile, mapped) {
     ],
   };
 
-  const seedText = String(els.liveSeed.value || "").trim();
-  if (seedText) {
-    payload.seed = Number(seedText);
-  }
   let trainingStyle = String(els.trainingStyle?.value || "balanced_default").trim();
   if (state.trainingWorkspace) {
     const draft = loadSetupDraft();
@@ -943,8 +979,6 @@ async function startLiveMatch() {
       targeted_mode: !!els.targetedMode.checked,
       target_config: buildTargetConfig(false),
     };
-    const seedText = String(els.liveSeed.value || "").trim();
-    if (seedText) payload.seed = Number(seedText);
 
     const result = await apiPost("/api/live/start", payload);
     localStorage.setItem(LIVE_SESSION_KEY, result.session_id);

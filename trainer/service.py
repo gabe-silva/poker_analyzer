@@ -267,6 +267,35 @@ class TrainerService:
             **status,
         }
 
+    def delete_uploaded_hands_file(
+        self,
+        filename: str,
+        *,
+        user_scope: str | None = None,
+    ) -> Dict[str, Any]:
+        raw_name = str(filename or "").strip()
+        if not raw_name:
+            raise ValueError("filename is required")
+
+        safe_name = Path(raw_name).name
+        if not safe_name:
+            raise ValueError("filename is required")
+
+        target = self._uploaded_hands_dir(user_scope) / safe_name
+        if not target.exists() or not target.is_file():
+            raise ValueError(f"Uploaded file not found: {safe_name}")
+
+        try:
+            target.unlink()
+        except OSError as exc:
+            raise ValueError(f"Could not delete uploaded file: {safe_name}") from exc
+
+        self._profile_cache.clear()
+        return {
+            "deleted_file": safe_name,
+            **self.hands_players(user_scope),
+        }
+
     def analyzer_players(self, user_scope: str | None = None) -> List[str]:
         uploaded = self.hands_players(user_scope=user_scope).get("players", [])
         return [str(row.get("selection_key") or row.get("username")) for row in uploaded]

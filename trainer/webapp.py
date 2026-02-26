@@ -511,6 +511,22 @@ def create_app() -> Flask:
         except Exception as exc:  # noqa: BLE001
             return _api_error(str(exc), status=400)
 
+    @app.post("/api/hands/delete")
+    def api_hands_delete():
+        payload = request.get_json(silent=True) or {}
+        filename = str(payload.get("filename", "")).strip()
+        if not filename:
+            return _api_error("filename is required", status=400)
+        try:
+            return jsonify(
+                service.delete_uploaded_hands_file(
+                    filename,
+                    user_scope=_current_user_scope(),
+                )
+            )
+        except Exception as exc:  # noqa: BLE001
+            return _api_error(str(exc), status=400)
+
     @app.get("/api/live/state")
     def api_live_state():
         blocked = _require_plan_feature(
