@@ -100,6 +100,28 @@ function applyWorkspacePresentation() {
   if (els.trainingWorkspaceNotice) {
     els.trainingWorkspaceNotice.style.display = training ? "block" : "none";
   }
+  if (els.analyzerPlayersLabel) {
+    els.analyzerPlayersLabel.childNodes[0].textContent = training
+      ? "Friend username (select one)"
+      : "Friend usernames (select one or more aliases)";
+  }
+  if (els.analyzerPlayers) {
+    els.analyzerPlayers.multiple = !training;
+    if (training && els.analyzerPlayers.options.length > 0) {
+      const selected = Array.from(els.analyzerPlayers.selectedOptions || []);
+      if (!selected.length) {
+        els.analyzerPlayers.options[0].selected = true;
+      } else if (selected.length > 1) {
+        const keep = selected[0].value;
+        Array.from(els.analyzerPlayers.options).forEach((opt) => {
+          opt.selected = opt.value === keep;
+        });
+      }
+    }
+  }
+  if (els.targetConfigGuide) {
+    els.targetConfigGuide.style.display = training ? "block" : "none";
+  }
 }
 
 async function bootstrap() {
@@ -111,6 +133,8 @@ async function bootstrap() {
     "analyzerGuide",
     "analyzerActionGuide",
     "trainingWorkspaceNotice",
+    "analyzerPlayersLabel",
+    "targetConfigGuide",
     "planBadge",
     "modeToggleRow",
     "playModeFull",
@@ -138,8 +162,6 @@ async function bootstrap() {
     "liveSeed",
     "targetedMode",
     "targetedModeWrap",
-    "useSetupDraft",
-    "useSetupDraftWrap",
     "targetConfigWrap",
     "tStreet",
     "tNodeType",
@@ -223,7 +245,7 @@ async function bootstrap() {
   if (!featureEnabled("allow_live_training")) {
     setStatus("Upgrade to Elite to use Friend Training workspace.", true);
   } else if (!state.session) {
-    setStatus("Ready. Upload hand files, select friend username(s), then click Start Match.");
+    setStatus("Ready. Upload hand files, select one friend username, then click Start Match.");
   }
 }
 
@@ -274,7 +296,6 @@ function applyPlanLocks() {
 
   if (els.modeToggleRow) els.modeToggleRow.style.display = "none";
   if (els.targetedModeWrap) els.targetedModeWrap.style.display = trainingVisible ? "inline-flex" : "none";
-  if (els.useSetupDraftWrap) els.useSetupDraftWrap.style.display = trainingVisible ? "inline-flex" : "none";
   if (els.targetConfigWrap) els.targetConfigWrap.style.display = trainingVisible ? "block" : "none";
   if (els.fullModeActions) els.fullModeActions.style.display = trainingVisible ? "flex" : "none";
   if (els.drillModeActions) els.drillModeActions.style.display = "none";
@@ -309,9 +330,6 @@ function applyPlanLocks() {
   if (els.targetedMode) {
     els.targetedMode.disabled = !trainingVisible;
   }
-  if (els.useSetupDraft) {
-    els.useSetupDraft.disabled = !trainingVisible;
-  }
 }
 
 function bindEvents() {
@@ -328,9 +346,6 @@ function bindEvents() {
 
   if (els.targetedMode) {
     els.targetedMode.addEventListener("change", updateTargetModeUi);
-  }
-  if (els.useSetupDraft) {
-    els.useSetupDraft.addEventListener("change", updateSetupDraftUi);
   }
   els.uploadHandsBtn.addEventListener("click", uploadHandsFiles);
   els.analyzeProfileBtn.addEventListener("click", analyzeSelectedProfile);
@@ -369,7 +384,6 @@ function updateModeUi() {
     if (els.fullModeActions) els.fullModeActions.style.display = "none";
     if (els.drillModeActions) els.drillModeActions.style.display = "none";
     if (els.targetedModeWrap) els.targetedModeWrap.style.display = "none";
-    if (els.useSetupDraftWrap) els.useSetupDraftWrap.style.display = "none";
     if (els.targetConfigWrap) els.targetConfigWrap.style.display = "none";
     setOutputView("none");
     return;
@@ -392,7 +406,7 @@ function updateModeUi() {
     } else {
       setOutputView("none");
       els.opponentSummary.textContent = "Opponent summary appears after match start.";
-      setStatus("Full Match mode selected. Upload hands, choose friend username(s), then click Start Match.");
+      setStatus("Full Match mode selected. Upload hands, choose one friend username, then click Start Match.");
     }
   } else {
     if (state.drillOpponentProfile) {
@@ -428,33 +442,22 @@ function toggleCompareConfig(show) {
 
 function updateSetupDraftUi() {
   if (!featureEnabled("allow_live_training") || !state.trainingWorkspace) return;
-  const usingDraft = !!els.useSetupDraft?.checked;
-  let appliedDraft = false;
-  const controls = [els.tStreet, els.tNodeType, els.tActionContext, els.tHeroPosition, els.trainingStyle];
-  if (usingDraft) {
-    const draft = loadSetupDraft();
-    if (draft) {
-      appliedDraft = true;
-      if (draft.street && els.tStreet) els.tStreet.value = draft.street;
-      if (draft.node_type && els.tNodeType) els.tNodeType.value = draft.node_type;
-      if (draft.action_context && els.tActionContext) els.tActionContext.value = draft.action_context;
-      if (draft.hero_position && els.tHeroPosition) {
-        els.tHeroPosition.value = normalizeHeadsUpPosition(draft.hero_position);
-      }
-      if (draft.hero_training_style && els.trainingStyle) {
-        const optionExists = Array.from(els.trainingStyle.options || []).some(
-          (opt) => opt.value === String(draft.hero_training_style),
-        );
-        if (optionExists) {
-          els.trainingStyle.value = String(draft.hero_training_style);
-        }
-      }
+  const draft = loadSetupDraft();
+  if (!draft) return;
+  if (draft.street && els.tStreet) els.tStreet.value = draft.street;
+  if (draft.node_type && els.tNodeType) els.tNodeType.value = draft.node_type;
+  if (draft.action_context && els.tActionContext) els.tActionContext.value = draft.action_context;
+  if (draft.hero_position && els.tHeroPosition) {
+    els.tHeroPosition.value = normalizeHeadsUpPosition(draft.hero_position);
+  }
+  if (draft.hero_training_style && els.trainingStyle) {
+    const optionExists = Array.from(els.trainingStyle.options || []).some(
+      (opt) => opt.value === String(draft.hero_training_style),
+    );
+    if (optionExists) {
+      els.trainingStyle.value = String(draft.hero_training_style);
     }
   }
-  controls.forEach((node) => {
-    if (!node) return;
-    node.disabled = usingDraft && appliedDraft;
-  });
 }
 
 function setOutputView(view) {
@@ -490,7 +493,7 @@ function normalizeHeadsUpPosition(value) {
 function buildTargetConfig(force = false) {
   if (!force && !els.targetedMode.checked) return null;
 
-  if (els.useSetupDraft.checked) {
+  if (state.trainingWorkspace) {
     const draft = loadSetupDraft();
     if (draft) {
       return {
@@ -548,9 +551,13 @@ function fillAnalyzerPlayerSelect(players, preserveSelection = true) {
 }
 
 function getSelectedAnalyzerPlayers() {
-  return Array.from(els.analyzerPlayers?.selectedOptions || [])
+  const selected = Array.from(els.analyzerPlayers?.selectedOptions || [])
     .map((opt) => String(opt.value || "").trim())
     .filter(Boolean);
+  if (state.trainingWorkspace) {
+    return selected.length ? [selected[0]] : [];
+  }
+  return selected;
 }
 
 function renderComparePlayerChoices(players) {
@@ -899,7 +906,7 @@ function buildDrillPayload(profile, mapped) {
     payload.seed = Number(seedText);
   }
   let trainingStyle = String(els.trainingStyle?.value || "balanced_default").trim();
-  if (els.useSetupDraft?.checked) {
+  if (state.trainingWorkspace) {
     const draft = loadSetupDraft();
     const draftStyle = String(draft?.hero_training_style || "").trim();
     if (draftStyle) {
@@ -927,8 +934,8 @@ async function startLiveMatch() {
     setOutputView("none");
     setStatus("Starting live match...");
     const selectedNames = getSelectedAnalyzerPlayers();
-    if (!selectedNames.length) {
-      throw new Error("Select at least one friend username before starting.");
+    if (selectedNames.length !== 1) {
+      throw new Error("Select exactly one friend username before starting.");
     }
     const payload = {
       analyzer_players: selectedNames,
@@ -1192,6 +1199,10 @@ async function startDrillHand() {
     toggleCompareConfig(false);
     setOutputView("none");
     setStatus("Generating profile drill hand...");
+    const selectedNames = getSelectedAnalyzerPlayers();
+    if (selectedNames.length !== 1) {
+      throw new Error("Select exactly one friend username before starting a drill.");
+    }
     const opponentProfile = await resolveOpponentProfile();
     const mappedArchetype = mapProfileToArchetype(opponentProfile);
     const payload = buildDrillPayload(opponentProfile, mappedArchetype);

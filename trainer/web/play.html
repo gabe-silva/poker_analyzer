@@ -39,9 +39,10 @@
         <div id="trainingWorkspaceNotice" class="hero-profile-block quick-guide" style="display:none;">
           <h3>Elite Friend Training</h3>
           <ol class="play-guide-list">
-            <li>Upload or refresh hand files to populate player buckets.</li>
-            <li>Select one or more friend usernames from the list.</li>
-            <li>Set targeted spot controls (or use Setup draft values).</li>
+            <li>Use the <strong>Setup</strong> tab for normal scenario training workflows.</li>
+            <li>Use this workspace only for training against one friend profile at a time.</li>
+            <li>Upload or refresh hand files, then select exactly one friend username.</li>
+            <li>Set targeted spot controls using your local setup defaults.</li>
             <li>Click <strong>Start Match</strong> to begin full-hand progression.</li>
           </ol>
         </div>
@@ -62,8 +63,8 @@
             Upload PokerNow JSON files
             <input id="handsFiles" type="file" accept=".json,application/json" multiple />
           </label>
-          <label>
-            Friend usernames (select one or more aliases)
+          <label id="analyzerPlayersLabel">
+            Friend usernames
             <select id="analyzerPlayers" multiple size="8"></select>
           </label>
           <div class="action-row">
@@ -105,13 +106,9 @@
             <input id="targetedMode" type="checkbox" />
             <span>Start From Targeted Scenario (instead of full preflop hand)</span>
           </label>
-          <label id="useSetupDraftWrap" class="switch-wrap">
-            <input id="useSetupDraft" type="checkbox" checked />
-            <span>Use Setup Page Draft For Targeted Spot</span>
-          </label>
         </div>
-        <div class="meta-strip">
-          Setup options: enable <strong>Use Setup Page Draft</strong> to pull saved street/node/action/hero-position defaults from Setup.
+        <div id="targetConfigGuide" class="meta-strip">
+          Setup options: targeted spot controls use your local Setup tab defaults.
         </div>
 
         <div id="targetConfigWrap" class="hero-profile-block">
