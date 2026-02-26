@@ -2,17 +2,17 @@ Screenshot Drop Folder For Landing Page
 
 Add screenshots here with these exact filenames so they can be referenced from the front page:
 
-1) free-dashboard.png
+1) free-dashboard.png                          --- done
    - Free tier player stats dashboard
 2) pro-compare.png
    - Pro tier side-by-side compare view
 3) elite-live-training.png
    - Elite tier friend-vs training / live table
-4) setup-style-training.png
+4) setup-style-training.png                        --- done
    - Setup page with hero training style selector
 5) trainer-ev-feedback.png
    - Trainer EV feedback and leak breakdown
-6) upload-flow.png
+6) upload-flow.png                               --- done
    - Upload hands -> player bucket selection flow
 
 Accepted formats: .png, .jpg, .jpeg, .webp
