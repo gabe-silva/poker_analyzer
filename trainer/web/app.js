@@ -24,9 +24,6 @@ document.addEventListener("DOMContentLoaded", () => {
     bootstrapTrainer().catch((err) => setStatus(`Trainer init failed: ${err.message}`, true));
     return;
   }
-  if (state.page === "standings") {
-    bootstrapStandings().catch((err) => setStatus(`Standings init failed: ${err.message}`, true));
-  }
 });
 
 function mapIds(ids) {
@@ -869,103 +866,6 @@ function renderLeakReport(report) {
       </div>
     </div>
   `;
-}
-
-async function bootstrapStandings() {
-  mapIds(["standingsLockNotice", "progressWrap", "refreshProgressBtn", "clearSavedBtn", "statusLine"]);
-  state.auth = await apiGet("/api/auth/status");
-  if (!planAllowsTrainingWorkbench()) {
-    lockPanel(
-      "standingsLockNotice",
-      "Pro tier required for standings and attempt history.",
-    );
-    if (els.refreshProgressBtn) els.refreshProgressBtn.disabled = true;
-    if (els.clearSavedBtn) els.clearSavedBtn.disabled = true;
-    if (els.progressWrap) {
-      els.progressWrap.textContent = "Standings are locked on your current plan.";
-    }
-    setStatus("Standings are locked on your current tier.", true);
-    return;
-  }
-  if (els.refreshProgressBtn) {
-    els.refreshProgressBtn.addEventListener("click", refreshProgress);
-  }
-  if (els.clearSavedBtn) {
-    els.clearSavedBtn.addEventListener("click", clearSavedHands);
-  }
-  await refreshProgress();
-}
-
-async function clearSavedHands() {
-  const ok = window.confirm("Clear all saved hands, scenarios, and standings attempts?");
-  if (!ok) return;
-  try {
-    setStatus("Clearing saved hands...");
-    const result = await apiPost("/api/clear_saved_hands", {});
-    localStorage.removeItem(LAST_SCENARIO_KEY);
-    await refreshProgress();
-    setStatus(
-      `Cleared ${result.scenarios_deleted || 0} scenarios and ${result.attempts_deleted || 0} attempts.`,
-    );
-  } catch (err) {
-    setStatus(`Clear failed: ${err.message}`, true);
-  }
-}
-
-async function refreshProgress() {
-  if (!els.progressWrap) return;
-  try {
-    setStatus("Loading standings...");
-    const p = await apiGet("/api/progress");
-    const totals = p.totals || {};
-    const header = `
-      <div class="stat-pill-row">
-        <span class="stat-pill">Attempts: ${totals.attempts || 0}</span>
-        <span class="stat-pill">Avg EV Loss: ${totals.avg_ev_loss_bb || 0}bb</span>
-        <span class="stat-pill">Accuracy (<=0.2bb): ${formatPct(totals.accuracy || 0)}</span>
-        <span class="stat-pill">Avg Chosen EV: ${totals.avg_chosen_ev_bb || 0}bb</span>
-      </div>
-    `;
-
-    const posRows = (p.by_position || [])
-      .map((r) => `<tr><td>${escapeHtml(r.label)}</td><td>${r.attempts}</td><td>${r.avg_ev_loss_bb}</td><td>${formatPct(r.accuracy)}</td></tr>`)
-      .join("");
-    const streetRows = (p.by_street || [])
-      .map((r) => `<tr><td>${escapeHtml(r.label)}</td><td>${r.attempts}</td><td>${r.avg_ev_loss_bb}</td><td>${formatPct(r.accuracy)}</td></tr>`)
-      .join("");
-
-    const recentRows = (p.recent_attempts || [])
-      .slice(0, 20)
-      .map((r) => {
-        const size = r.chosen_size_bb !== null && r.chosen_size_bb !== undefined ? ` ${r.chosen_size_bb}bb` : "";
-        const intent = r.chosen_intent ? ` (${r.chosen_intent})` : "";
-        return `<tr><td>#${r.attempt_id}</td><td>${escapeHtml(r.hero_position)}</td><td>${escapeHtml(r.street)}</td><td>${escapeHtml(r.chosen_action)}${size}${intent}</td><td>${r.ev_loss_bb}</td><td>${escapeHtml(r.verdict)}</td></tr>`;
-      })
-      .join("");
-
-    els.progressWrap.innerHTML = `
-      ${header}
-      <h3>By Position</h3>
-      <table class="mini-table">
-        <thead><tr><th>Position</th><th>Attempts</th><th>Avg EV Loss</th><th>Accuracy</th></tr></thead>
-        <tbody>${posRows || "<tr><td colspan='4'>No data</td></tr>"}</tbody>
-      </table>
-      <h3>By Street</h3>
-      <table class="mini-table">
-        <thead><tr><th>Street</th><th>Attempts</th><th>Avg EV Loss</th><th>Accuracy</th></tr></thead>
-        <tbody>${streetRows || "<tr><td colspan='4'>No data</td></tr>"}</tbody>
-      </table>
-      <h3>Recent Attempts</h3>
-      <table class="mini-table">
-        <thead><tr><th>ID</th><th>Pos</th><th>Street</th><th>Chosen</th><th>EV Loss</th><th>Verdict</th></tr></thead>
-        <tbody>${recentRows || "<tr><td colspan='6'>No attempts yet</td></tr>"}</tbody>
-      </table>
-    `;
-    setStatus("Standings loaded.");
-  } catch (err) {
-    els.progressWrap.textContent = `Could not load progress: ${err.message}`;
-    setStatus(`Progress load failed: ${err.message}`, true);
-  }
 }
 
 function fillSelect(select, options) {

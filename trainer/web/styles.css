@@ -126,12 +126,6 @@ body {
   gap: 16px;
 }
 
-.standings-layout {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 16px;
-}
-
 .play-layout {
   display: grid;
   grid-template-columns: 1fr;

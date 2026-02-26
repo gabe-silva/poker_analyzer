@@ -116,9 +116,6 @@ class TrainerRequestHandler(SimpleHTTPRequestHandler):
                 return
             self._send_json(self.service.get_scenario(scenario_id))
             return
-        if path == "/api/progress":
-            self._send_json(self.service.progress())
-            return
         if path == "/api/opponent_profile":
             name = (query.get("name") or [None])[0]
             if not name:
@@ -150,8 +147,6 @@ class TrainerRequestHandler(SimpleHTTPRequestHandler):
             self.path = "/trainer.html"
         elif path == "/play":
             self.path = "/play.html"
-        elif path == "/standings":
-            self.path = "/standings.html"
         return super().do_GET()
 
     def do_POST(self) -> None:  # noqa: N802

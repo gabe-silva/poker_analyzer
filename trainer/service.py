@@ -145,6 +145,7 @@ class TrainerService:
         file_items: List[Tuple[str, bytes]],
         *,
         max_total_hands: int | None = None,
+        max_hands_per_bucket: int | None = None,
     ) -> Dict[str, Any]:
         if not file_items:
             raise ValueError("No files uploaded")
@@ -204,18 +205,41 @@ class TrainerService:
             )
 
         status = self.hands_players()
-        if max_total_hands is not None and int(status.get("total_hands", 0)) > int(max_total_hands):
+        def _rollback_uploads() -> Dict[str, Any]:
             for path in written_paths:
                 try:
                     path.unlink()
                 except OSError:
                     pass
             self._profile_cache.clear()
-            status = self.hands_players()
+            return self.hands_players()
+
+        if max_total_hands is not None and int(status.get("total_hands", 0)) > int(max_total_hands):
+            status = _rollback_uploads()
             raise ValueError(
                 f"Upload exceeds plan limit of {int(max_total_hands)} total hands. "
                 f"Current uploaded hands: {int(status.get('total_hands', 0))}."
             )
+        if max_hands_per_bucket is not None:
+            bucket_limit = int(max_hands_per_bucket)
+            violating = []
+            for row in status.get("players", []) or []:
+                hands_seen = int(row.get("hands_seen", 0))
+                if hands_seen > bucket_limit:
+                    violating.append(
+                        {
+                            "name": str(row.get("display_name") or row.get("username") or row.get("selection_key") or "unknown"),
+                            "hands_seen": hands_seen,
+                        }
+                    )
+            if violating:
+                violating.sort(key=lambda item: item["hands_seen"], reverse=True)
+                status = _rollback_uploads()
+                top = ", ".join(f"{entry['name']} ({entry['hands_seen']})" for entry in violating[:3])
+                raise ValueError(
+                    f"Upload exceeds plan limit of {bucket_limit} hands per player bucket. "
+                    f"Top bucket(s): {top}."
+                )
         self._profile_cache.clear()
         return {
             "saved_files": saved,

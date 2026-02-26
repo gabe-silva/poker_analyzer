@@ -30,8 +30,6 @@ PROTECTED_PAGE_PATHS = {
     "/trainer.html",
     "/play",
     "/play.html",
-    "/standings",
-    "/standings.html",
 }
 
 PUBLIC_API_PATHS = {
@@ -413,16 +411,6 @@ def create_app() -> Flask:
         except Exception as exc:  # noqa: BLE001
             return _api_error(str(exc), status=400)
 
-    @app.get("/api/progress")
-    def api_progress():
-        blocked = _require_plan_feature(
-            "allow_training_workbench",
-            "Upgrade to Pro to access the training standings dashboard.",
-        )
-        if blocked:
-            return blocked
-        return jsonify(service.progress())
-
     @app.get("/api/opponent_profile")
     def api_opponent_profile():
         name = str(request.args.get("name", "")).strip()
@@ -501,10 +489,14 @@ def create_app() -> Flask:
             blob = file_storage.read() or b""
             file_items.append((filename, bytes(blob)))
         try:
+            per_bucket_limit = plan.get("max_upload_hands_per_bucket")
             return jsonify(
                 service.upload_hands(
                     file_items,
                     max_total_hands=int(plan.get("max_upload_hands", 500)),
+                    max_hands_per_bucket=(
+                        int(per_bucket_limit) if per_bucket_limit is not None else None
+                    ),
                 )
             )
         except Exception as exc:  # noqa: BLE001
@@ -616,11 +608,6 @@ def create_app() -> Flask:
     @app.get("/play.html")
     def play_page():
         return _serve_page("play.html")
-
-    @app.get("/standings")
-    @app.get("/standings.html")
-    def standings_page():
-        return _serve_page("standings.html")
 
     @app.get("/<path:filename>")
     def static_files(filename: str):
