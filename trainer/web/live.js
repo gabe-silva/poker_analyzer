@@ -19,6 +19,10 @@ const state = {
   drillSelectedIntent: "value",
   analyzedProfile: null,
   comparedProfiles: [],
+  compareLookup: {
+    byText: new Map(),
+    bySelectionKey: new Set(),
+  },
 };
 
 const els = {};
@@ -71,8 +75,9 @@ async function bootstrap() {
     "analyzeProfileBtn",
     "compareProfilesBtn",
     "compareConfig",
-    "compareGroupA",
-    "compareGroupB",
+    "comparePlayerA",
+    "comparePlayerB",
+    "comparePlayerList",
     "comparisonPanel",
     "comparisonDashboard",
     "profileDashboard",
@@ -395,12 +400,53 @@ function fillAnalyzerPlayerSelect(players, preserveSelection = true) {
   if (!els.analyzerPlayers.selectedOptions.length && els.analyzerPlayers.options.length > 0) {
     els.analyzerPlayers.options[0].selected = true;
   }
+  renderComparePlayerChoices(players || []);
 }
 
 function getSelectedAnalyzerPlayers() {
   return Array.from(els.analyzerPlayers?.selectedOptions || [])
     .map((opt) => String(opt.value || "").trim())
     .filter(Boolean);
+}
+
+function renderComparePlayerChoices(players) {
+  if (!els.comparePlayerList) return;
+  const byText = new Map();
+  const bySelectionKey = new Set();
+  const items = [];
+  for (const row of players || []) {
+    const selectionKey = String(row?.selection_key || "").trim();
+    if (!selectionKey) continue;
+    const displayName = String(row?.display_name || row?.username || "").trim();
+    if (!displayName) continue;
+    const handsSeen = Number(row?.hands_seen || 0);
+    items.push({ selectionKey, displayName, handsSeen });
+    bySelectionKey.add(selectionKey);
+    byText.set(displayName.toLowerCase(), selectionKey);
+    byText.set(selectionKey.toLowerCase(), selectionKey);
+    const aliases = Array.isArray(row?.usernames) ? row.usernames : [];
+    for (const alias of aliases) {
+      const token = String(alias || "").trim();
+      if (!token) continue;
+      byText.set(token.toLowerCase(), selectionKey);
+    }
+  }
+
+  const unique = [];
+  const seenDisplay = new Set();
+  for (const item of items) {
+    const key = item.displayName.toLowerCase();
+    if (seenDisplay.has(key)) continue;
+    seenDisplay.add(key);
+    unique.push(item);
+  }
+  unique.sort((a, b) => b.handsSeen - a.handsSeen || a.displayName.localeCompare(b.displayName));
+
+  els.comparePlayerList.innerHTML = unique
+    .map((item) => `<option value="${escapeHtml(item.displayName)}"></option>`)
+    .join("");
+
+  state.compareLookup = { byText, bySelectionKey };
 }
 
 function renderHandsStatus(status) {
@@ -460,11 +506,17 @@ async function resolveOpponentProfile() {
   return apiGet(`/api/opponent_profile?name=${encodeURIComponent(names.join(","))}`);
 }
 
-function parseAliasInput(value) {
-  return String(value || "")
-    .split(",")
-    .map((token) => token.trim())
-    .filter(Boolean);
+function resolveComparePlayerInput(value) {
+  const token = String(value || "").trim();
+  if (!token) return null;
+  const lookup = state.compareLookup || {};
+  if (lookup.bySelectionKey instanceof Set && lookup.bySelectionKey.has(token)) {
+    return token;
+  }
+  if (lookup.byText instanceof Map) {
+    return lookup.byText.get(token.toLowerCase()) || null;
+  }
+  return null;
 }
 
 function profileStatsPills(profile) {
@@ -549,31 +601,29 @@ async function compareProfileGroups() {
     return;
   }
   try {
-    const groupA = parseAliasInput(els.compareGroupA?.value);
-    const groupB = parseAliasInput(els.compareGroupB?.value);
-    const groups = [];
-    if (groupA.length) groups.push({ label: "Player Group A", usernames: groupA });
-    if (groupB.length) groups.push({ label: "Player Group B", usernames: groupB });
-    if (!groups.length) {
-      throw new Error("Enter aliases for at least one comparison group.");
+    const playerA = resolveComparePlayerInput(els.comparePlayerA?.value);
+    const playerB = resolveComparePlayerInput(els.comparePlayerB?.value);
+    if (!playerA || !playerB) {
+      throw new Error("Select both Player A and Player B from the suggested list.");
     }
+    if (playerA === playerB) {
+      throw new Error("Player A and Player B must be different.");
+    }
+    const groups = [
+      { label: "Player A", usernames: [playerA] },
+      { label: "Player B", usernames: [playerB] },
+    ];
     const maxGroups = maxCompareGroups();
     if (groups.length > maxGroups) {
-      throw new Error(`Your plan supports up to ${maxGroups} compare groups.`);
+      throw new Error(`Your plan supports comparing up to ${maxGroups} player slot(s).`);
     }
-    const aliasLimit = maxAliasesPerProfile();
-    for (const group of groups) {
-      if ((group.usernames || []).length > aliasLimit) {
-        throw new Error(`A group exceeds alias limit (${aliasLimit}).`);
-      }
-    }
-    setStatus("Comparing profile groups...");
+    setStatus("Comparing players...");
     const result = await apiPost("/api/opponent/compare", { groups });
     state.comparedProfiles = result.profiles || [];
     renderComparisonDashboard(state.comparedProfiles);
     setStatus("Comparison ready.");
   } catch (err) {
-    setStatus(`Could not compare groups: ${err.message}`, true);
+    setStatus(`Could not compare players: ${err.message}`, true);
   }
 }
 

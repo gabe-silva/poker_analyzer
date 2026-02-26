@@ -77,14 +77,15 @@
           <h3>Two-Player Compare (Pro+)</h3>
           <div class="field-grid">
             <label>
-              Player Group A (comma-separated aliases)
-              <input id="compareGroupA" type="text" placeholder="alice, alice_1, alice_home" />
+              Player A (type to pick from list)
+              <input id="comparePlayerA" type="text" list="comparePlayerList" placeholder="Start typing a player name" />
             </label>
             <label>
-              Player Group B (comma-separated aliases)
-              <input id="compareGroupB" type="text" placeholder="bob, bob_alt" />
+              Player B (type to pick from list)
+              <input id="comparePlayerB" type="text" list="comparePlayerList" placeholder="Start typing a player name" />
             </label>
           </div>
+          <datalist id="comparePlayerList"></datalist>
         </div>
 
         <div class="toggle-row">
@@ -127,7 +128,7 @@
 
       <section class="panel" id="comparisonPanel">
         <h2>Two-Player Comparison</h2>
-        <div id="comparisonDashboard" class="feedback-summary">Pro+ can compare two alias groups side-by-side.</div>
+        <div id="comparisonDashboard" class="feedback-summary">Pick Player A and Player B, then click Compare Two Players.</div>
       </section>
 
       <section id="fullModePanel" class="panel">
