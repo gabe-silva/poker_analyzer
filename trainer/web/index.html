@@ -69,7 +69,27 @@
 
       <section class="panel panel-tour">
         <h2>Product Tour Screenshots</h2>
+        <p class="tour-order-note">Ordered by plan progression: <strong>Free</strong> -> <strong>Pro</strong> -> <strong>Elite</strong>.</p>
         <div class="tour-grid">
+          <div class="tour-tier-break">
+            <span class="tour-tier-pill tour-tier-free">Free Tier</span>
+            <p>Upload and analyze hands with core profile stats.</p>
+          </div>
+          <article class="tour-card">
+            <h3>Upload Flow</h3>
+            <div class="screenshot-slot">
+              <img
+                class="tour-shot"
+                src="/screenshots/upload-flow.png"
+                alt="Upload flow screenshot"
+                loading="lazy"
+                onload="this.nextElementSibling.style.display='none'"
+                onerror="this.style.display='none'"
+              />
+              <div class="screenshot-placeholder">Drop file: <code>upload-flow.png</code></div>
+            </div>
+            <p class="meta-strip">Hands upload to ID-bucket selector flow.</p>
+          </article>
           <article class="tour-card">
             <h3>Free Dashboard</h3>
             <div class="screenshot-slot">
@@ -85,6 +105,11 @@
             </div>
             <p class="meta-strip">Own stats, no exploit output.</p>
           </article>
+
+          <div class="tour-tier-break">
+            <span class="tour-tier-pill tour-tier-pro">Pro Tier</span>
+            <p>Unlock exploit outputs and deeper training workflows.</p>
+          </div>
           <article class="tour-card">
             <h3>Pro Compare View</h3>
             <div class="screenshot-slot">
@@ -98,22 +123,22 @@
               />
               <div class="screenshot-placeholder">Drop file: <code>pro-compare.png</code></div>
             </div>
-            <p class="meta-strip">Two player groups, exploit output included.</p>
+            <p class="meta-strip">Two players side-by-side, exploit output included.</p>
           </article>
           <article class="tour-card">
-            <h3>Elite Friend Training</h3>
+            <h3>Pro Hand-by-Hand Training</h3>
             <div class="screenshot-slot">
               <img
                 class="tour-shot"
-                src="/screenshots/elite-live-training.png"
-                alt="Elite friend training screenshot"
+                src="/screenshots/pro-hand-by-hand-training.png"
+                alt="Pro hand-by-hand training screenshot"
                 loading="lazy"
                 onload="this.nextElementSibling.style.display='none'"
                 onerror="this.style.display='none'"
               />
-              <div class="screenshot-placeholder">Drop file: <code>elite-live-training.png</code></div>
+              <div class="screenshot-placeholder">Drop file: <code>pro-hand-by-hand-training.png</code></div>
             </div>
-            <p class="meta-strip">Live friend-specific training and guidance.</p>
+            <p class="meta-strip">Step through one hand decision-by-decision with sizing and intent controls.</p>
           </article>
           <article class="tour-card">
             <h3>Style Setup</h3>
@@ -145,20 +170,25 @@
             </div>
             <p class="meta-strip">Action EV table and leak decomposition.</p>
           </article>
+
+          <div class="tour-tier-break">
+            <span class="tour-tier-pill tour-tier-elite">Elite Tier</span>
+            <p>Train in friend-specific live scenarios.</p>
+          </div>
           <article class="tour-card">
-            <h3>Upload Flow</h3>
+            <h3>Elite Friend Training</h3>
             <div class="screenshot-slot">
               <img
                 class="tour-shot"
-                src="/screenshots/upload-flow.png"
-                alt="Upload flow screenshot"
+                src="/screenshots/elite-live-training.png"
+                alt="Elite friend training screenshot"
                 loading="lazy"
                 onload="this.nextElementSibling.style.display='none'"
                 onerror="this.style.display='none'"
               />
-              <div class="screenshot-placeholder">Drop file: <code>upload-flow.png</code></div>
+              <div class="screenshot-placeholder">Drop file: <code>elite-live-training.png</code></div>
             </div>
-            <p class="meta-strip">Hands upload to ID-bucket selector flow.</p>
+            <p class="meta-strip">Live friend-specific training and guidance.</p>
           </article>
         </div>
       </section>

@@ -219,6 +219,54 @@ body {
   margin-bottom: 16px;
 }
 
+.tour-order-note {
+  margin: 0 0 14px;
+  color: var(--text-1);
+}
+
+.tour-tier-break {
+  border: 1px solid rgba(255, 222, 151, 0.22);
+  border-radius: 10px;
+  background: rgba(11, 25, 19, 0.72);
+  padding: 10px 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+}
+
+.tour-tier-break p {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 0.9rem;
+}
+
+.tour-tier-pill {
+  display: inline-block;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 222, 151, 0.45);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  padding: 3px 10px;
+}
+
+.tour-tier-free {
+  color: #201606;
+  background: linear-gradient(140deg, #dba826, #d7c071);
+}
+
+.tour-tier-pro {
+  color: #efd9a0;
+  background: rgba(216, 161, 30, 0.22);
+}
+
+.tour-tier-elite {
+  color: #f6e6bd;
+  background: rgba(79, 52, 17, 0.74);
+}
+
 .screenshot-placeholder {
   position: absolute;
   inset: 0;
