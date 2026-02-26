@@ -113,7 +113,7 @@ function renderPlanSummary() {
     parts.push(`${tier.toUpperCase()} checkout is not configured yet.`);
   } else {
     const selectedLabel = checkoutPlanLabel(tier);
-    parts.push(`Selected: ${selectedLabel}. Click Continue With Plan to open Stripe checkout.`);
+    parts.push(`Selected: ${selectedLabel}. Click ${newAccountCtaLabel(tier)} to open Stripe checkout.`);
   }
 
   if (currentTier === tier) {
@@ -151,9 +151,9 @@ function refreshActionVisibility() {
     if (els.verifyCodeBtn) els.verifyCodeBtn.disabled = false;
     toggleVisible(els.portalBtn, false);
   } else {
-    const title = checkoutPlanLabel(tier);
+    const newAccountLabel = newAccountCtaLabel(tier);
     if (els.startPlanBtn) {
-      els.startPlanBtn.textContent = `Continue With ${title}`;
+      els.startPlanBtn.textContent = newAccountLabel;
       els.startPlanBtn.disabled = !checkoutReady;
     }
     toggleVisible(els.requestCodeBtn, true);
@@ -169,6 +169,13 @@ function refreshActionVisibility() {
 
   toggleVisible(els.continueBtn, isAuthenticated);
   toggleVisible(els.logoutBtn, isAuthenticated);
+}
+
+function newAccountCtaLabel(tier) {
+  const normalized = normalizePlanTier(tier);
+  if (normalized === "elite") return "Continue With New Elite Account";
+  if (normalized === "pro") return "Continue With New Pro Account";
+  return "Start Free";
 }
 
 function checkoutPlanLabel(tier) {
