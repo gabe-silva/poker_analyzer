@@ -836,10 +836,23 @@ class BillingService:
         self._require_enabled()
         info = self.store.subscription_for_email(email)
         if not info:
-            raise ValueError("No billing profile found for this user")
+            raise ValueError(
+                "No paid billing profile found for this user. Choose Pro or Elite and complete checkout first."
+            )
         customer_id = str(info.get("stripe_customer_id") or "").strip()
         if not customer_id:
-            raise ValueError("No Stripe customer linked for this user")
+            sub_id = str(info.get("stripe_subscription_id") or "").strip()
+            if sub_id:
+                try:
+                    sub = stripe.Subscription.retrieve(sub_id)
+                    synced = self._sync_subscription(sub, fallback_email=email)
+                    customer_id = str(synced.get("stripe_customer_id") or "").strip()
+                except Exception:  # noqa: BLE001
+                    customer_id = ""
+        if not customer_id:
+            raise ValueError(
+                "No Stripe customer linked yet. Choose Pro or Elite and complete checkout first."
+            )
         portal = stripe.billing_portal.Session.create(
             customer=customer_id,
             return_url=return_url,

@@ -24,6 +24,7 @@
     <main class="auth-layout">
       <section class="panel auth-panel">
         <h2>Access</h2>
+        <p class="auth-helper">Pick a tier below. The steps shown will update based on your selection.</p>
         <div class="field-grid">
           <label>
             Email
@@ -41,13 +42,40 @@
           <label class="mode-pill"><input type="radio" name="planTier" value="elite" /><span>Elite</span></label>
         </div>
 
-        <div class="action-row">
+        <section class="tier-playbook">
+          <article data-tier-help="free">
+            <h3>Free Flow</h3>
+            <ol>
+              <li>Enter your email.</li>
+              <li>Click <strong>Start Free</strong> to send a login code.</li>
+              <li>Paste code and click <strong>Verify &amp; Sign In</strong>.</li>
+            </ol>
+          </article>
+          <article data-tier-help="pro" hidden>
+            <h3>Pro Flow</h3>
+            <ol>
+              <li>Enter your email.</li>
+              <li>Click <strong>Continue With Pro Plan</strong> to open Stripe checkout.</li>
+              <li>After checkout, request a login code and sign in.</li>
+            </ol>
+          </article>
+          <article data-tier-help="elite" hidden>
+            <h3>Elite Flow</h3>
+            <ol>
+              <li>Enter your email.</li>
+              <li>Click <strong>Continue With Elite Plan</strong> to open Stripe checkout.</li>
+              <li>After checkout, request a login code and sign in.</li>
+            </ol>
+          </article>
+        </section>
+
+        <div id="primaryActionRow" class="action-row">
           <button id="startPlanBtn" class="btn-primary">Continue With Plan</button>
           <button id="requestCodeBtn" class="btn-ghost">Email Login Code</button>
           <button id="verifyCodeBtn" class="btn-ghost">Verify & Sign In</button>
         </div>
 
-        <div class="action-row">
+        <div id="secondaryActionRow" class="action-row">
           <button id="portalBtn" class="btn-ghost">Manage Billing</button>
           <button id="continueBtn" class="btn-ghost">Open App</button>
           <button id="logoutBtn" class="btn-ghost">Log Out</button>

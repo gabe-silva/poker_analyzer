@@ -38,7 +38,7 @@ function bindEvents() {
   });
   els.logoutBtn?.addEventListener("click", logout);
   document.querySelectorAll("input[name='planTier']").forEach((input) => {
-    input.addEventListener("change", renderPlanSummary);
+    input.addEventListener("change", refreshAccountUi);
   });
 }
 
@@ -66,7 +66,7 @@ async function bootstrap() {
     setStatus("Could not verify payment. Contact support if this persists.", true);
   }
 
-  renderPlanSummary();
+  refreshAccountUi();
 }
 
 function normalizePlanTier(raw) {
@@ -92,11 +92,15 @@ function planByTier(tier) {
   return plansSnapshot.find((p) => normalizePlanTier(p?.tier) === normalizePlanTier(tier)) || null;
 }
 
+function currentPlanTier() {
+  return normalizePlanTier(authSnapshot?.plan?.tier) || "free";
+}
+
 function renderPlanSummary() {
   if (!els.planSummary) return;
   const tier = selectedPlanTier();
   const selected = planByTier(tier);
-  const currentTier = normalizePlanTier(authSnapshot?.plan?.tier) || "free";
+  const currentTier = currentPlanTier();
   const currentLabel = String(authSnapshot?.plan?.label || currentTier).trim();
   const checkoutEnabled = !!selected?.checkout_enabled;
 
@@ -120,6 +124,62 @@ function renderPlanSummary() {
   els.planSummary.textContent = parts.join(" ");
 }
 
+function refreshTierPlaybook() {
+  const tier = selectedPlanTier();
+  document.querySelectorAll("[data-tier-help]").forEach((node) => {
+    const cardTier = normalizePlanTier(node.getAttribute("data-tier-help"));
+    node.hidden = cardTier !== tier;
+  });
+}
+
+function refreshActionVisibility() {
+  const tier = selectedPlanTier();
+  const currentTier = currentPlanTier();
+  const isAuthenticated = !!authSnapshot?.authenticated;
+  const hasPaidPlan = !!authSnapshot?.plan?.paid;
+  const checkoutReady = !!planByTier(tier)?.checkout_enabled;
+
+  if (tier === "free") {
+    if (els.startPlanBtn) {
+      els.startPlanBtn.textContent = "Start Free";
+      els.startPlanBtn.disabled = false;
+    }
+    toggleVisible(els.requestCodeBtn, false);
+    toggleVisible(els.verifyCodeBtn, true);
+    if (els.verifyCodeBtn) els.verifyCodeBtn.disabled = false;
+    toggleVisible(els.portalBtn, false);
+  } else {
+    const title = tier === "elite" ? "Elite" : "Pro";
+    if (els.startPlanBtn) {
+      els.startPlanBtn.textContent = `Continue With ${title} Plan`;
+      els.startPlanBtn.disabled = !checkoutReady;
+    }
+    toggleVisible(els.requestCodeBtn, true);
+    toggleVisible(els.verifyCodeBtn, true);
+    const canRequestCode = isAuthenticated || currentTier === tier;
+    if (els.requestCodeBtn) {
+      els.requestCodeBtn.textContent = canRequestCode ? "Email Login Code" : "Email Login Code (after checkout)";
+      els.requestCodeBtn.disabled = !canRequestCode;
+    }
+    if (els.verifyCodeBtn) els.verifyCodeBtn.disabled = !canRequestCode;
+    toggleVisible(els.portalBtn, isAuthenticated && hasPaidPlan);
+  }
+
+  toggleVisible(els.continueBtn, isAuthenticated);
+  toggleVisible(els.logoutBtn, isAuthenticated);
+}
+
+function refreshAccountUi() {
+  renderPlanSummary();
+  refreshTierPlaybook();
+  refreshActionVisibility();
+}
+
+function toggleVisible(element, show) {
+  if (!element) return;
+  element.hidden = !show;
+}
+
 async function continueWithSelectedPlan() {
   const tier = selectedPlanTier();
   if (tier === "free") {
@@ -129,26 +189,38 @@ async function continueWithSelectedPlan() {
   await startCheckout(tier);
 }
 
-async function startCheckout(planTier) {
-  const email = normalizedEmail();
+function checkoutEmail() {
+  return normalizedEmail() || String(authSnapshot?.email || "").trim().toLowerCase();
+}
+
+async function startCheckout(planTier, options = {}) {
+  const { manageBusy = true } = options;
+  const email = checkoutEmail();
   if (!email) {
     setStatus("Enter a valid email first.", true);
     return;
   }
-  setBusy(true);
+  if (manageBusy) setBusy(true);
   try {
     const session = await apiPost("/api/billing/create-checkout-session", {
       email,
       plan_tier: planTier,
     });
-    if (!session?.url) {
+    const checkoutUrl = String(session?.url || "").trim();
+    if (!checkoutUrl) {
       throw new Error("Checkout URL missing from server response");
     }
-    window.location.href = session.url;
+    let target = null;
+    try {
+      target = new URL(checkoutUrl);
+    } catch (err) {
+      throw new Error("Received invalid Stripe checkout URL. Verify Stripe keys and price IDs.");
+    }
+    window.location.href = target.toString();
   } catch (err) {
     setStatus(err.message, true);
   } finally {
-    setBusy(false);
+    if (manageBusy) setBusy(false);
   }
 }
 
@@ -201,8 +273,30 @@ async function openBillingPortal() {
     if (!result?.url) {
       throw new Error("Billing portal URL missing");
     }
-    window.location.href = result.url;
+    let target = null;
+    try {
+      target = new URL(String(result.url || "").trim());
+    } catch (err) {
+      throw new Error("Received invalid billing portal URL from server.");
+    }
+    window.location.href = target.toString();
   } catch (err) {
+    const message = String(err.message || "");
+    if (
+      /No Stripe customer linked|No billing profile found|No paid billing profile/i.test(message)
+    ) {
+      const tier = selectedPlanTier();
+      if (tier === "free") {
+        setStatus(
+          "No paid billing account found yet. Select Pro or Elite and click Continue With Plan first.",
+          true
+        );
+      } else {
+        setStatus("No billing profile found yet. Starting checkout for selected plan...");
+        await startCheckout(tier, { manageBusy: false });
+      }
+      return;
+    }
     setStatus(err.message, true);
   } finally {
     setBusy(false);
@@ -244,6 +338,9 @@ function setBusy(isBusy) {
   ].forEach((btn) => {
     if (btn) btn.disabled = isBusy;
   });
+  if (!isBusy) {
+    refreshActionVisibility();
+  }
 }
 
 function setStatus(message, isError = false) {
@@ -254,9 +351,7 @@ function setStatus(message, isError = false) {
 
 async function apiGet(url) {
   const res = await fetch(url, { credentials: "same-origin" });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-  return data;
+  return parseApiResponse(res);
 }
 
 async function apiPost(url, payload) {
@@ -266,7 +361,22 @@ async function apiPost(url, payload) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return parseApiResponse(res);
+}
+
+async function parseApiResponse(res) {
+  const raw = await res.text();
+  let data = {};
+  if (raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch (err) {
+      data = {};
+    }
+  }
+  if (!res.ok) {
+    const fallback = raw ? raw.replace(/\s+/g, " ").trim().slice(0, 180) : "";
+    throw new Error(data.error || fallback || `HTTP ${res.status}`);
+  }
   return data;
 }

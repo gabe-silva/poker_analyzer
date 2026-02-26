@@ -368,6 +368,8 @@ def create_app() -> Flask:
             return _api_error(str(exc), status=400)
         except RuntimeError as exc:
             return _api_error(str(exc), status=500)
+        except Exception as exc:  # noqa: BLE001
+            return _api_error(str(exc), status=500)
 
     @app.post("/api/billing/create-portal-session")
     def create_portal_session():
@@ -383,6 +385,8 @@ def create_app() -> Flask:
         except ValueError as exc:
             return _api_error(str(exc), status=400)
         except RuntimeError as exc:
+            return _api_error(str(exc), status=500)
+        except Exception as exc:  # noqa: BLE001
             return _api_error(str(exc), status=500)
 
     @app.post("/api/billing/webhook")
