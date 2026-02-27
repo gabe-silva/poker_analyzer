@@ -62,7 +62,7 @@ PLAN_ENTITLEMENTS: Dict[str, Dict[str, Any]] = {
     PLAN_ELITE: {
         "tier": PLAN_ELITE,
         "label": "Elite",
-        "monthly_price_usd": 79,
+        "monthly_price_usd": 39,
         "max_upload_hands": 6000,
         "max_upload_hands_per_bucket": 6000,
         "max_aliases_per_profile": 30,

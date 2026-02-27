@@ -181,7 +181,7 @@ function newAccountCtaLabel(tier) {
 function checkoutPlanLabel(tier) {
   const normalized = normalizePlanTier(tier);
   const plan = planByTier(normalized);
-  const fallback = normalized === "elite" ? "Elite Plan ($79/mo)" : normalized === "pro" ? "Pro Plan ($29/mo)" : "Free";
+  const fallback = normalized === "elite" ? "Elite Plan ($39/mo)" : normalized === "pro" ? "Pro Plan ($29/mo)" : "Free";
   const price = Number(plan?.monthly_price_usd || 0);
   const label = String(plan?.label || "").trim();
   if (label) {
