@@ -628,6 +628,12 @@ def create_app() -> Flask:
     def setup_page():
         return _serve_page("setup.html")
 
+    @app.get("/download-guide")
+    @app.get("/tutorial")
+    @app.get("/download-guide.html")
+    def download_guide_page():
+        return _serve_page("download-guide.html")
+
     @app.get("/trainer")
     @app.get("/trainer.html")
     def trainer_page():

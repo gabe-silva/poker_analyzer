@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PokerNow Trainer - Download Guide</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body data-page="download-guide">
+  <div class="backdrop-orb orb-a"></div>
+  <div class="backdrop-orb orb-b"></div>
+  <div class="page-wrap">
+    <header class="top-hero">
+      <h1>PokerNow Hand Log Download Guide</h1>
+      <p>How to export PokerNow hand history JSON files for upload into PokerNow Trainer.</p>
+      <nav class="top-nav">
+        <a href="/index.html" class="nav-link">Plans</a>
+        <a href="/play.html" class="nav-link">Analyzer</a>
+        <a href="/setup.html" class="nav-link">Setup</a>
+        <a href="/trainer.html" class="nav-link">Trainer</a>
+        <a href="/download-guide.html" class="nav-link active">Download Guide</a>
+        <a href="/login.html" class="nav-link">Account</a>
+      </nav>
+    </header>
+
+    <main class="landing-layout">
+      <section class="panel tier-playbook">
+        <h3>Quick Summary</h3>
+        <ol>
+          <li>Open <strong>LOG / LEDGER</strong> from your PokerNow table.</li>
+          <li>In Session Log, click <strong>REPLAYER</strong>.</li>
+          <li>In Replayer, click the <strong>"clicking here"</strong> link to download.</li>
+          <li>Go back to <strong>Analyzer</strong> and upload the downloaded file.</li>
+        </ol>
+      </section>
+
+      <section class="panel panel-tour">
+        <h2>Step-by-Step Tutorial</h2>
+        <p class="tour-order-note">Use these screenshots in order after your game finishes.</p>
+
+        <div class="tour-grid">
+          <article class="tour-card tutorial-step-card">
+            <h3>Step 1: Open LOG / LEDGER on the table</h3>
+            <div class="screenshot-slot">
+              <img
+                class="tour-shot"
+                src="/screenshots/tutorial-step-1-log-ledger.png"
+                alt="PokerNow table showing LOG LEDGER button"
+                loading="lazy"
+                onload="this.nextElementSibling.style.display='none'"
+                onerror="this.style.display='none'"
+              />
+              <div class="screenshot-placeholder">Drop file: <code>tutorial-step-1-log-ledger.png</code></div>
+            </div>
+            <p class="meta-strip">Click LOG / LEDGER on the bottom-left corner of the table.</p>
+          </article>
+
+          <article class="tour-card tutorial-step-card">
+            <h3>Step 2: Click REPLAYER in Session Log</h3>
+            <div class="screenshot-slot">
+              <img
+                class="tour-shot"
+                src="/screenshots/tutorial-step-2-replayer-button.png"
+                alt="Session Log showing REPLAYER button"
+                loading="lazy"
+                onload="this.nextElementSibling.style.display='none'"
+                onerror="this.style.display='none'"
+              />
+              <div class="screenshot-placeholder">Drop file: <code>tutorial-step-2-replayer-button.png</code></div>
+            </div>
+            <p class="meta-strip">From Session Log, click the REPLAYER button near the bottom-right.</p>
+          </article>
+
+          <article class="tour-card tutorial-step-card">
+            <h3>Step 3: Download from Replayer link</h3>
+            <div class="screenshot-slot">
+              <img
+                class="tour-shot"
+                src="/screenshots/tutorial-step-3-clicking-here-link.png"
+                alt="Game Replayer showing clicking here link"
+                loading="lazy"
+                onload="this.nextElementSibling.style.display='none'"
+                onerror="this.style.display='none'"
+              />
+              <div class="screenshot-placeholder">Drop file: <code>tutorial-step-3-clicking-here-link.png</code></div>
+            </div>
+            <p class="meta-strip">Select a hand and use the highlighted "clicking here" link to download the log file.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>After Download</h2>
+        <ol class="landing-steps">
+          <li>Open <a href="/play.html">Analyzer</a>.</li>
+          <li>Click <strong>Choose Files</strong> and select your downloaded JSON file(s).</li>
+          <li>Click <strong>Upload Hand Files</strong>.</li>
+          <li>Select player name(s), then run analysis.</li>
+        </ol>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

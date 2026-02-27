@@ -143,6 +143,8 @@ class TrainerRequestHandler(SimpleHTTPRequestHandler):
             self.path = "/index.html"
         elif path == "/setup":
             self.path = "/setup.html"
+        elif path in {"/download-guide", "/tutorial"}:
+            self.path = "/download-guide.html"
         elif path == "/trainer":
             self.path = "/trainer.html"
         elif path == "/play":

@@ -207,6 +207,10 @@ body {
   color: #f3dfaf;
 }
 
+.tutorial-step-card h3 {
+  font-size: 1.2rem;
+}
+
 .screenshot-slot {
   position: relative;
   border: 1px dashed rgba(217, 165, 62, 0.45);
