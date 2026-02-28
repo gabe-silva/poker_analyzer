@@ -236,7 +236,7 @@ async function bootstrap() {
 
   if (!state.trainingWorkspace) {
     setStatus(
-      "Ready. Upload files, click Upload Hand Files, select username(s), then Analyze Selected Profile. Friend training is in Trainer.",
+      "Ready. Upload files, click Upload Hand Files, select username(s), then Analyze One Player. Friend training is in Trainer.",
     );
     return;
   }
@@ -757,18 +757,32 @@ function renderComparisonDashboard(profiles) {
     els.comparisonDashboard.textContent = "No comparison results yet.";
     return;
   }
+  const showExploitPlan = featureEnabled("show_exploits");
   const cards = profiles
     .map((profile) => {
-      const exploits = (profile.exploits || [])
-        .slice(0, 4)
-        .map((e) => `<li>${escapeHtml(e.description || "")}</li>`)
+      const tendencies = (profile.tendencies || [])
+        .slice(0, 8)
+        .map((t) => `<li>${escapeHtml(t)}</li>`)
         .join("");
+      const exploits = (profile.exploits || [])
+        .slice(0, 6)
+        .map(
+          (e) =>
+            `<li><strong>[${escapeHtml((e.category || "").toUpperCase())}]</strong> ${escapeHtml(
+              e.description || "",
+            )} -> ${escapeHtml(e.counter_strategy || "")}</li>`,
+        )
+        .join("");
+      const exploitBlock = showExploitPlan
+        ? `<div><strong>Exploit Plan</strong><ul class="leak-note-list">${exploits || "<li>No exploit notes.</li>"}</ul></div>`
+        : `<div class="meta-strip">Free tier hides exploit plans. Upgrade to Pro to unlock them.</div>`;
       return `
         <div class="comparison-card">
           <div><strong>${escapeHtml(profile.group_label || profile.name || "Player")}</strong></div>
           ${profileStatsPills(profile)}
           <div class="meta-strip">Aliases: ${escapeHtml((profile.selected_usernames || []).join(", ") || "n/a")}</div>
-          <div><strong>Top Exploits</strong><ul class="leak-note-list">${exploits || "<li>No exploit notes.</li>"}</ul></div>
+          <div><strong>Tendencies</strong><ul class="leak-note-list">${tendencies || "<li>No tendency data.</li>"}</ul></div>
+          ${exploitBlock}
         </div>
       `;
     })

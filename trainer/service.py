@@ -355,7 +355,7 @@ class TrainerService:
                         "description": e.description,
                         "counter_strategy": e.counter_strategy,
                     }
-                    for e in profile.exploits[:5]
+                    for e in profile.exploits[:10]
                 ]
                 if include_exploits
                 else []
@@ -509,7 +509,7 @@ class TrainerService:
                         "description": description,
                         "counter_strategy": counter,
                     }
-                    for (category, description, counter), _ in exploit_counter.most_common(5)
+                    for (category, description, counter), _ in exploit_counter.most_common(10)
                     if description
                 ]
             built = {

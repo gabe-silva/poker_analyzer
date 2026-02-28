@@ -312,94 +312,283 @@ class ProfileAnalyzer:
         postflop: PostflopStats,
         showdown: ShowdownStats
     ) -> list[Exploit]:
-        """Identify exploitable weaknesses and counter-strategies."""
-        
-        exploits = []
-        
-        # Preflop exploits
+        """
+        Identify exploitable weaknesses and counter-strategies.
+
+        Output includes tactical "attacks" and conservative adjustment advice.
+        We also guarantee minimum street coverage (at least 3 streets represented)
+        so each profile has usable game-plan notes across the hand.
+        """
+
+        exploits: list[Exploit] = []
+        seen: set[tuple[str, str, str]] = set()
+
+        def add_exploit(category: str, description: str, counter_strategy: str, confidence: float) -> None:
+            cat = str(category or "").strip().lower() or "postflop"
+            desc = str(description or "").strip()
+            counter = str(counter_strategy or "").strip()
+            if not desc or not counter:
+                return
+            key = (cat, desc.lower(), counter.lower())
+            if key in seen:
+                return
+            seen.add(key)
+            exploits.append(
+                Exploit(
+                    description=desc,
+                    counter_strategy=counter,
+                    confidence=max(0.0, min(float(confidence), 0.95)),
+                    category=cat,
+                )
+            )
+
+        def has_category(category: str) -> bool:
+            return any(e.category == category for e in exploits)
+
+        # -----------------
+        # Preflop guidance
+        # -----------------
         if preflop.fold_to_3bet > 0.70 and preflop.fold_to_3bet_opportunities >= 15:
-            exploits.append(Exploit(
-                description=f"Folds to 3-bets {preflop.fold_to_3bet:.0%} of time",
-                counter_strategy="3-bet bluff their opens frequently",
-                confidence=0.8,
-                category="preflop"
-            ))
+            add_exploit(
+                "preflop",
+                f"Folds to 3-bets {preflop.fold_to_3bet:.0%} of the time",
+                "3-bet bluff their opens at a higher frequency, especially in position.",
+                0.82,
+            )
 
         if preflop.limp_rate > 0.12:
-            exploits.append(Exploit(
-                description=f"Limps {preflop.limp_rate:.0%} of hands",
-                counter_strategy="Raise their limps aggressively for easy profit",
-                confidence=0.7,
-                category="preflop"
-            ))
+            add_exploit(
+                "preflop",
+                f"Limps {preflop.limp_rate:.0%} of hands",
+                "Isolate limps aggressively and punish weak capped ranges preflop.",
+                0.74,
+            )
 
         if preflop.vpip_pfr_gap > 0.12:
-            exploits.append(Exploit(
-                description=f"Large VPIP-PFR gap ({preflop.vpip_pfr_gap:.1%})",
-                counter_strategy="Value bet thinner - they call too wide",
-                confidence=0.75,
-                category="preflop"
-            ))
-        
-        # Postflop exploits
-        if postflop.flop.cbet_frequency > 0.70:
-            exploits.append(Exploit(
-                description=f"C-bets {postflop.flop.cbet_frequency:.0%} of flops",
-                counter_strategy="Float flops wider, raise bluff occasionally",
-                confidence=0.7,
-                category="postflop"
-            ))
+            add_exploit(
+                "preflop",
+                f"Large VPIP-PFR gap ({preflop.vpip_pfr_gap:.1%})",
+                "Expect wide calling ranges; value bet wider preflop and postflop.",
+                0.78,
+            )
+
+        if preflop.three_bet_frequency > 0.11 and preflop.three_bet_opportunities >= 20:
+            add_exploit(
+                "preflop",
+                f"3-bets aggressively ({preflop.three_bet_frequency:.0%})",
+                "Tighten marginal opens OOP and favor value-heavy 4-bets over loose flats.",
+                0.72,
+            )
+
+        if preflop.vpip < 0.17 and preflop.hands_played >= 40:
+            add_exploit(
+                "preflop",
+                f"Very tight VPIP ({preflop.vpip:.0%})",
+                "Steal blinds more often and pressure capped defend ranges with position.",
+                0.7,
+            )
+
+        if not has_category("preflop"):
+            if preflop.vpip_pfr_gap > 0.08:
+                add_exploit(
+                    "preflop",
+                    "Calls preflop wider than they raise",
+                    "Use thinner value opens/isolations and reduce pure preflop bluffs.",
+                    0.62,
+                )
+            else:
+                add_exploit(
+                    "preflop",
+                    "Preflop mix appears relatively balanced",
+                    "Default to position-first preflop decisions and adjust once more hands are collected.",
+                    0.55,
+                )
+
+        # -------------
+        # Flop guidance
+        # -------------
+        if postflop.flop.cbet_frequency > 0.70 and postflop.flop.cbet_opportunities >= 20:
+            add_exploit(
+                "flop",
+                f"C-bets {postflop.flop.cbet_frequency:.0%} of flops",
+                "Float more flops in position and add selective bluff raises on dry textures.",
+                0.74,
+            )
+
+        if postflop.flop.cbet_frequency < 0.45 and postflop.flop.cbet_opportunities >= 20:
+            add_exploit(
+                "flop",
+                f"Checks frequently as preflop aggressor (c-bet {postflop.flop.cbet_frequency:.0%})",
+                "Stab more often when checked to on flop, especially with backdoor equity.",
+                0.72,
+            )
 
         if postflop.flop.fold_to_bet > 0.55 and postflop.flop.faced_bet_count >= 20:
-            exploits.append(Exploit(
-                description=f"Folds to flop bets {postflop.flop.fold_to_bet:.0%}",
-                counter_strategy="Bluff flop liberally",
-                confidence=0.8,
-                category="postflop"
-            ))
+            add_exploit(
+                "flop",
+                f"Folds to flop bets {postflop.flop.fold_to_bet:.0%}",
+                "Run more flop probes and c-bet bluffs, then shut down when called on bad runouts.",
+                0.81,
+            )
 
-        if postflop.double_barrel_frequency < 0.40 and postflop.double_barrel_opportunities >= 20:
-            exploits.append(Exploit(
-                description=f"Double barrels only {postflop.double_barrel_frequency:.0%}",
-                counter_strategy="Call flop c-bets wide, expect turn check",
-                confidence=0.75,
-                category="postflop"
-            ))
+        if postflop.flop.fold_to_bet < 0.35 and postflop.flop.faced_bet_count >= 20:
+            add_exploit(
+                "flop",
+                f"Continues vs flop bets at a high rate ({1 - postflop.flop.fold_to_bet:.0%})",
+                "Bluff less on flop and size up value hands that can bet multiple streets.",
+                0.77,
+            )
 
         if postflop.check_raise_frequency > 0.15 and postflop.check_raise_opportunities >= 15:
-            exploits.append(Exploit(
-                description=f"Check-raises {postflop.check_raise_frequency:.0%}",
-                counter_strategy="Check back marginal hands for pot control",
-                confidence=0.7,
-                category="postflop"
-            ))
-        
-        # River exploits
-        if showdown.river_bet_value_rate > 0.70 and len(showdown.river_bet_strength_samples) >= 8:
-            exploits.append(Exploit(
-                description=f"River bets are {showdown.river_bet_value_rate:.0%} value",
-                counter_strategy="Overfold river to their bets",
-                confidence=0.85,
-                category="river"
-            ))
+            add_exploit(
+                "flop",
+                f"Check-raises frequently ({postflop.check_raise_frequency:.0%})",
+                "Do not call flop raises too light; continue mainly with strong made hands or robust draws.",
+                0.73,
+            )
 
-        if showdown.river_bet_bluff_rate > 0.35 and len(showdown.river_bet_strength_samples) >= 8:
-            exploits.append(Exploit(
-                description=f"River bluff rate is {showdown.river_bet_bluff_rate:.0%}",
-                counter_strategy="Call down lighter on river",
-                confidence=0.75,
-                category="river"
-            ))
+        if not has_category("flop"):
+            if postflop.flop.fold_to_bet >= 0.5:
+                add_exploit(
+                    "flop",
+                    "Flop decisions trend toward overfolding under pressure",
+                    "Use small frequent flop stabs in position and track whether turn resistance increases.",
+                    0.6,
+                )
+            else:
+                add_exploit(
+                    "flop",
+                    "Flop continue rates are relatively sticky",
+                    "Prioritize value-heavy flop betting and avoid low-equity one-and-done bluffs.",
+                    0.58,
+                )
 
-        # Showdown exploits
+        # -------------
+        # Turn guidance
+        # -------------
+        if postflop.double_barrel_frequency < 0.40 and postflop.double_barrel_opportunities >= 20:
+            add_exploit(
+                "turn",
+                f"Double barrels only {postflop.double_barrel_frequency:.0%}",
+                "Call flop wider when ranges permit, then attack turn checks aggressively.",
+                0.78,
+            )
+
+        if postflop.double_barrel_frequency > 0.62 and postflop.double_barrel_opportunities >= 20:
+            add_exploit(
+                "turn",
+                f"Fires second barrel often ({postflop.double_barrel_frequency:.0%})",
+                "Defend turn mainly with stronger equity and avoid marginal flop floats without turn plans.",
+                0.73,
+            )
+
+        if postflop.turn.fold_to_bet > 0.55 and postflop.turn.faced_bet_count >= 15:
+            add_exploit(
+                "turn",
+                f"Overfolds turn after facing bets ({postflop.turn.fold_to_bet:.0%})",
+                "Increase turn probes and delayed barrels when blockers favor your range.",
+                0.74,
+            )
+
+        if postflop.turn.fold_to_bet < 0.35 and postflop.turn.faced_bet_count >= 15:
+            add_exploit(
+                "turn",
+                f"Calls turn frequently ({1 - postflop.turn.fold_to_bet:.0%})",
+                "Slow down low-equity turn bluffs and lean toward high-equity semibluffs or value.",
+                0.7,
+            )
+
+        if not has_category("turn"):
+            if postflop.double_barrel_opportunities >= 12:
+                add_exploit(
+                    "turn",
+                    "Turn follow-through is a key inflection point for this profile",
+                    "Track flop-to-turn continuation in-session and adapt by either probing checks or respecting strong second barrels.",
+                    0.57,
+                )
+            else:
+                add_exploit(
+                    "turn",
+                    "Limited turn sample so far",
+                    "Use population-default turn strategy, then tighten adjustments once turn sample grows.",
+                    0.52,
+                )
+
+        # --------------
+        # River guidance
+        # --------------
+        river_samples = len(showdown.river_bet_strength_samples)
+        if showdown.river_bet_value_rate > 0.70 and river_samples >= 8:
+            add_exploit(
+                "river",
+                f"River bets are heavily value-weighted ({showdown.river_bet_value_rate:.0%})",
+                "Overfold bluff-catchers to river aggression unless your blockers are exceptional.",
+                0.86,
+            )
+
+        if showdown.river_bet_bluff_rate > 0.35 and river_samples >= 8:
+            add_exploit(
+                "river",
+                f"River bluff rate is elevated ({showdown.river_bet_bluff_rate:.0%})",
+                "Widen river bluff-catch range versus missed draws and unblocked bluff combos.",
+                0.77,
+            )
+
         if showdown.wtsd > 0.33 and showdown.w_sd < 0.45:
-            exploits.append(Exploit(
-                description="Goes to showdown too often and loses",
-                counter_strategy="Value bet relentlessly, cut bluffs on river",
-                confidence=0.8,
-                category="showdown"
-            ))
-        
+            add_exploit(
+                "river",
+                "Goes to showdown often but wins too infrequently",
+                "Value bet thinner on river and avoid unnecessary river bluffs versus this calling profile.",
+                0.8,
+            )
+
+        if showdown.wtsd < 0.22 and showdown.w_sd > 0.54:
+            add_exploit(
+                "river",
+                "Arrives at showdown with a stronger-than-average range",
+                "Use fewer thin bluff-catches and give more credit to large river bets.",
+                0.72,
+            )
+
+        if not has_category("river"):
+            add_exploit(
+                "river",
+                "River decision quality is a major edge spot versus this profile",
+                "Base river calls/folds on line consistency and blocker effects, not only hand strength.",
+                0.56,
+            )
+
+        # Enforce minimum street coverage: at least 3 streets represented.
+        street_order = ["preflop", "flop", "turn", "river"]
+        fallback_by_street = {
+            "preflop": (
+                "Preflop adjustments should be driven by position and opening frequencies",
+                "Track who enters too many pots and widen value-isolation first.",
+            ),
+            "flop": (
+                "Flop strategy should adapt to this player's continue-versus-fold pattern",
+                "Favor either high-frequency small stabs or value-heavy betting based on immediate folds.",
+            ),
+            "turn": (
+                "Turn actions reveal whether this player gives up or keeps applying pressure",
+                "Plan flop calls with a clear turn response before putting chips in on flop.",
+            ),
+            "river": (
+                "River lines are often the highest-EV exploit spot",
+                "Adjust bluff-catching and value-thin decisions to this player's showdown tendencies.",
+            ),
+        }
+        covered = {e.category for e in exploits if e.category in street_order}
+        if len(covered) < 3:
+            for street in street_order:
+                if street in covered:
+                    continue
+                desc, counter = fallback_by_street[street]
+                add_exploit(street, desc, counter, 0.5)
+                covered.add(street)
+                if len(covered) >= 3:
+                    break
+
         return exploits
     
     def _assess_confidence(self, hands: int) -> str:
