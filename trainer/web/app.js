@@ -15,6 +15,8 @@ const state = {
   evalPrefetchKey: null,
   evalPrefetchController: null,
   evalPrefetchTimer: null,
+  scenarioInteractive: false,
+  scenarioWarmTimer: null,
 };
 
 const els = {};
@@ -470,6 +472,7 @@ async function generateScenarioFromPayload(payload, options = {}) {
   resetEvaluationPrefetchState();
   renderScenario(scenario);
   renderDecisionPanel(scenario);
+  scheduleScenarioPostRenderWork(scenario.scenario_id);
   if (els.feedbackSummary) {
     els.feedbackSummary.textContent = "Choose one line and submit to score the decision.";
   }
@@ -552,6 +555,7 @@ async function bootstrapTrainer() {
 
   renderScenario(scenario);
   renderDecisionPanel(scenario);
+  scheduleScenarioPostRenderWork(scenario.scenario_id);
   els.feedbackSummary.textContent = "Choose one line and submit to score the decision.";
   els.evTableWrap.innerHTML = "";
   els.leakBreakdownWrap.innerHTML = "";
@@ -797,10 +801,15 @@ function evalDecisionKey(decision) {
 }
 
 function resetEvaluationPrefetchState() {
+  state.scenarioInteractive = false;
   if (state.evalPrefetchTimer) {
     clearTimeout(state.evalPrefetchTimer);
   }
   state.evalPrefetchTimer = null;
+  if (state.scenarioWarmTimer) {
+    clearTimeout(state.scenarioWarmTimer);
+  }
+  state.scenarioWarmTimer = null;
   if (state.evalPrefetchController) {
     state.evalPrefetchController.abort();
   }
@@ -810,6 +819,7 @@ function resetEvaluationPrefetchState() {
 }
 
 async function maybePreFetchEval() {
+  if (!state.scenarioInteractive) return;
   if (!state.scenario) return;
   const decision = buildCurrentDecision();
   if (!decision) return;
@@ -852,6 +862,31 @@ async function maybePreFetchEval() {
       }
     }
   }, 120);
+}
+
+function warmScenarioInBackground(scenarioId) {
+  if (!scenarioId) return;
+  apiPost("/api/scenario/warm", {
+    scenario_id: scenarioId,
+    simulations: 360,
+  }).catch(() => {});
+}
+
+function scheduleScenarioPostRenderWork(scenarioId) {
+  state.scenarioInteractive = false;
+  if (state.scenarioWarmTimer) {
+    clearTimeout(state.scenarioWarmTimer);
+  }
+  // Wait for paint so cards/options are visible before background EV warmup.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      state.scenarioWarmTimer = setTimeout(() => {
+        state.scenarioInteractive = true;
+        warmScenarioInBackground(scenarioId);
+        maybePreFetchEval();
+      }, 60);
+    });
+  });
 }
 
 async function submitDecision() {

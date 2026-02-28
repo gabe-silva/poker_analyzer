@@ -570,6 +570,16 @@ def create_app() -> Flask:
             return blocked
         return _json_post(service.evaluate)
 
+    @app.post("/api/scenario/warm")
+    def api_scenario_warm():
+        blocked = _require_plan_feature(
+            "allow_training_workbench",
+            "Upgrade to Pro to warm scenario EV calculations.",
+        )
+        if blocked:
+            return blocked
+        return _json_post(service.warm_scenario)
+
     @app.post("/api/clear_saved_hands")
     def api_clear_saved():
         blocked = _require_plan_feature(

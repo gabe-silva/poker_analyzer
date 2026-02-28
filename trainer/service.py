@@ -7,6 +7,7 @@ import hashlib
 import json
 import math
 import re
+import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Set, Tuple
@@ -40,6 +41,9 @@ class TrainerService:
         self._evaluation_cache: Dict[str, Dict[str, Any]] = {}
         self._evaluation_cache_ttl_sec = 300
         self._evaluation_cache_max = 256
+        self._scenario_table_cache: Dict[str, Dict[str, Any]] = {}
+        self._scenario_table_cache_ttl_sec = 600
+        self._scenario_table_cache_max = 128
         self._root_dir = Path(__file__).resolve().parent.parent
         self._uploaded_hands_root_dir = self._root_dir / "trainer" / "data" / "uploaded_hands"
         self._uploaded_hands_root_dir.mkdir(parents=True, exist_ok=True)
@@ -125,6 +129,58 @@ class TrainerService:
             "evaluation": evaluation,
         }
         self._prune_evaluation_cache()
+
+    @staticmethod
+    def _scenario_table_key(scenario_id: str, simulations: int) -> str:
+        return f"{str(scenario_id)}::{int(simulations)}"
+
+    def _prune_scenario_table_cache(self) -> None:
+        now = time.time()
+        expired = [
+            key
+            for key, row in self._scenario_table_cache.items()
+            if now - float(row.get("created_at", 0.0)) > self._scenario_table_cache_ttl_sec
+        ]
+        for key in expired:
+            self._scenario_table_cache.pop(key, None)
+        if len(self._scenario_table_cache) <= self._scenario_table_cache_max:
+            return
+        ordered = sorted(
+            self._scenario_table_cache.items(),
+            key=lambda item: float(item[1].get("created_at", 0.0)),
+        )
+        to_remove = len(self._scenario_table_cache) - self._scenario_table_cache_max
+        for key, _ in ordered[:to_remove]:
+            self._scenario_table_cache.pop(key, None)
+
+    def _get_cached_scenario_table(self, scenario_id: str, simulations: int) -> list | None:
+        self._prune_scenario_table_cache()
+        row = self._scenario_table_cache.get(self._scenario_table_key(scenario_id, simulations))
+        if not row:
+            return None
+        table = row.get("table")
+        return table if isinstance(table, list) else None
+
+    def _put_cached_scenario_table(self, scenario_id: str, simulations: int, table: list) -> None:
+        self._scenario_table_cache[self._scenario_table_key(scenario_id, simulations)] = {
+            "created_at": time.time(),
+            "table": table,
+        }
+        self._prune_scenario_table_cache()
+
+    def _warm_scenario_table_cache(self, scenario_id: str, simulations: int) -> None:
+        try:
+            scenario = self.store.get_scenario(scenario_id)
+            if scenario is None:
+                return
+            if self._get_cached_scenario_table(str(scenario_id), simulations) is not None:
+                return
+            calc = EvCalculator(scenario, simulations=simulations)
+            table = calc.action_table()
+            self._put_cached_scenario_table(str(scenario_id), simulations, table)
+        except Exception:
+            # Best-effort warm path; evaluation path handles fallback.
+            return
 
     def _uploaded_hand_files(self, user_scope: str | None = None) -> List[Path]:
         upload_dir = self._uploaded_hands_dir(user_scope)
@@ -637,14 +693,39 @@ class TrainerService:
 
     def generate(self, payload: dict) -> dict:
         scenario = generate_scenario(payload)
-        # Precompute the full EV action table once per scenario to avoid
-        # recomputing it on every decision submission.
-        precompute_simulations = int(payload.get("simulations", 360))
-        calc = EvCalculator(scenario, simulations=precompute_simulations)
-        scenario["_cached_action_table"] = calc.action_table()
-        scenario["_cached_action_table_simulations"] = precompute_simulations
         self.store.save_scenario(scenario)
         return self._public_scenario(scenario)
+
+    def warm_scenario(self, payload: dict) -> dict:
+        scenario_id = str(payload.get("scenario_id", "")).strip()
+        if not scenario_id:
+            raise ValueError("scenario_id is required")
+        simulations = int(payload.get("simulations", 360))
+        scenario = self.store.get_scenario(scenario_id)
+        if scenario is None:
+            raise ValueError(f"Scenario not found: {scenario_id}")
+
+        if self._get_cached_scenario_table(scenario_id, simulations) is not None:
+            return {
+                "ok": True,
+                "scenario_id": scenario_id,
+                "simulations": simulations,
+                "cached": True,
+                "queued": False,
+            }
+
+        threading.Thread(
+            target=self._warm_scenario_table_cache,
+            args=(scenario_id, simulations),
+            daemon=True,
+        ).start()
+        return {
+            "ok": True,
+            "scenario_id": scenario_id,
+            "simulations": simulations,
+            "cached": False,
+            "queued": True,
+        }
 
     def get_scenario(self, scenario_id: str) -> dict:
         scenario = self.store.get_scenario(scenario_id)
@@ -677,6 +758,12 @@ class TrainerService:
                 maybe_rows = scenario.get("_cached_action_table")
                 if isinstance(maybe_rows, list):
                     cached_actions = maybe_rows
+            if cached_actions is None:
+                cached_actions = self._get_cached_scenario_table(str(scenario_id), simulations)
+            if cached_actions is None:
+                calc = EvCalculator(scenario, simulations=simulations)
+                cached_actions = calc.action_table()
+                self._put_cached_scenario_table(str(scenario_id), simulations, cached_actions)
             evaluation = evaluate_decision(
                 scenario,
                 decision,
