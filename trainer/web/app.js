@@ -1,5 +1,6 @@
 const SETUP_STORAGE_KEY = "trainer:setupConfigV1";
 const LAST_SCENARIO_KEY = "trainer:lastScenarioId";
+const PENDING_SCENARIO_KEY = "trainer:pendingScenarioV1";
 
 const state = {
   page: null,
@@ -456,6 +457,11 @@ async function generateScenarioFromPayload(payload, options = {}) {
   const scenario = await apiPost("/api/generate", payload);
   localStorage.setItem(LAST_SCENARIO_KEY, scenario.scenario_id);
   if (options.navigateToTrainer) {
+    try {
+      sessionStorage.setItem(PENDING_SCENARIO_KEY, JSON.stringify(scenario));
+    } catch {
+      // Non-fatal: trainer page will fall back to API fetch.
+    }
     window.location.href = `/trainer.html?scenario_id=${encodeURIComponent(scenario.scenario_id)}`;
     return scenario;
   }
@@ -531,8 +537,15 @@ async function bootstrapTrainer() {
     return;
   }
 
-  setStatus(`Loading scenario ${scenarioId}...`);
-  const scenario = await apiGet(`/api/scenario?scenario_id=${encodeURIComponent(scenarioId)}`);
+  let usedPendingScenario = false;
+  let scenario = loadPendingScenario(scenarioId);
+  if (scenario) {
+    usedPendingScenario = true;
+    setStatus(`Scenario ${scenarioId} shown. EV table warming in background...`);
+  } else {
+    setStatus(`Loading scenario ${scenarioId}...`);
+    scenario = await apiGet(`/api/scenario?scenario_id=${encodeURIComponent(scenarioId)}`);
+  }
   state.scenario = scenario;
   resetEvaluationPrefetchState();
   localStorage.setItem(LAST_SCENARIO_KEY, scenario.scenario_id);
@@ -542,12 +555,14 @@ async function bootstrapTrainer() {
   els.feedbackSummary.textContent = "Choose one line and submit to score the decision.";
   els.evTableWrap.innerHTML = "";
   els.leakBreakdownWrap.innerHTML = "";
-  setStatus(`Scenario ${scenario.scenario_id} loaded.`);
+  if (!usedPendingScenario && scenario?.scenario_id) {
+    setStatus(`Scenario ${scenario.scenario_id} loaded.`);
+  }
 }
 
 async function regenerateSameSetupScenario() {
   try {
-    setStatus("Generating new example from saved setup...");
+    setStatus("Generating new scenario from your current setup...");
     const draft = loadSetupDraft();
     if (!draft) {
       setStatus("No saved setup found. Configure setup first.", true);
@@ -556,7 +571,7 @@ async function regenerateSameSetupScenario() {
     const payload = cloneObject(draft);
     delete payload.seed; // Ensure a new example while keeping same setup configuration.
     const scenario = await generateScenarioFromPayload(payload, { navigateToTrainer: false });
-    setStatus(`Loaded new scenario ${scenario.scenario_id} from saved setup.`);
+    setStatus(`Loaded new scenario ${scenario.scenario_id}.`);
   } catch (err) {
     setStatus(`Could not generate new setup scenario: ${err.message}`, true);
   }
@@ -567,6 +582,42 @@ function getScenarioIdFromLocation() {
   const queryId = url.searchParams.get("scenario_id");
   if (queryId) return queryId;
   return localStorage.getItem(LAST_SCENARIO_KEY);
+}
+
+function loadPendingScenario(expectedScenarioId) {
+  let raw = null;
+  try {
+    raw = sessionStorage.getItem(PENDING_SCENARIO_KEY);
+  } catch {
+    return null;
+  }
+  if (!raw) return null;
+
+  try {
+    const scenario = JSON.parse(raw);
+    const scenarioId = String(scenario?.scenario_id || "");
+    if (expectedScenarioId && scenarioId && scenarioId !== String(expectedScenarioId)) {
+      try {
+        sessionStorage.removeItem(PENDING_SCENARIO_KEY);
+      } catch {
+        // Best-effort cleanup.
+      }
+      return null;
+    }
+    try {
+      sessionStorage.removeItem(PENDING_SCENARIO_KEY);
+    } catch {
+      // Best-effort cleanup.
+    }
+    return scenario && typeof scenario === "object" ? scenario : null;
+  } catch {
+    try {
+      sessionStorage.removeItem(PENDING_SCENARIO_KEY);
+    } catch {
+      // Best-effort cleanup.
+    }
+    return null;
+  }
 }
 
 function renderScenario(s) {
@@ -811,8 +862,16 @@ async function submitDecision() {
     return;
   }
   const freeResponse = els.decisionPanel.querySelector("#freeResponse")?.value || "";
+  const decisionKey = evalDecisionKey(decision);
+  const prefetched = decisionKey && state.evalPrefetchResult?.key === decisionKey ? state.evalPrefetchResult.result : null;
+  if (prefetched?.evaluation) {
+    renderEvaluation(prefetched.evaluation);
+    setStatus("Using prefetched EV result, saving attempt...");
+  }
   try {
-    setStatus("Scoring EV...");
+    if (!prefetched) {
+      setStatus("Scoring EV...");
+    }
     const result = await apiPost("/api/evaluate", {
       scenario_id: state.scenario.scenario_id,
       decision,
