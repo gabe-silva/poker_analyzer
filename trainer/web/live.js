@@ -799,11 +799,20 @@ async function analyzeSelectedProfile() {
     toggleCompareConfig(false);
     setOutputView("none");
     setStatus("Building profile dashboard...");
-    const profile = await resolveOpponentProfile();
+    const selected = getSelectedAnalyzerPlayers();
+    if (!selected.length) {
+      throw new Error("Select at least one friend username");
+    }
+    const primarySelection = selected[0];
+    const profile = await apiGet(`/api/opponent_profile?name=${encodeURIComponent(primarySelection)}`);
     state.analyzedProfile = profile;
     renderSingleProfileDashboard(profile);
     setOutputView("profile");
-    setStatus("Profile analysis ready.");
+    if (selected.length > 1) {
+      setStatus("Profile analysis ready. Multiple selected; used the first selected player only.");
+    } else {
+      setStatus("Profile analysis ready.");
+    }
   } catch (err) {
     setStatus(`Could not analyze profile: ${err.message}`, true);
   }
