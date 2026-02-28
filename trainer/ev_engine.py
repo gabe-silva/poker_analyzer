@@ -493,6 +493,46 @@ class EvCalculator:
 
         return sorted(table, key=lambda row: row["ev_bb"], reverse=True)
 
+    def evaluate_choice(self, decision: dict) -> Optional[dict]:
+        """
+        Compute EV row for exactly one normalized choice.
+
+        This mirrors action_table() row construction and is used for
+        counterfactual calculations to avoid recomputing the full table.
+        """
+        legal = list(self.scenario["legal_actions"])
+        action, size, intent = _normalize_choice(decision)
+        if action not in legal:
+            return None
+
+        if action == "fold":
+            return {
+                "action": "fold",
+                "size_bb": None,
+                "intent": None,
+                "label": "Fold",
+                "equity": 0.0,
+                "fold_equity": 0.0,
+                "expected_callers": float(len(self.active_villains())),
+                "pot_if_called_bb": float(self.scenario["pot_bb"]),
+                "risk_bb": 0.0,
+                "realization": 0.0,
+                "ev_bb": 0.0,
+                "ev_ci_bb": 0.0,
+            }
+        if action == "check":
+            return self._call_like_ev("check")
+        if action == "call":
+            return self._call_like_ev("call")
+
+        if action in {"bet", "raise"}:
+            if size is None:
+                return None
+            if intent is None:
+                intent = "value"
+            return self._aggressive_ev(action, float(size), str(intent))
+        return None
+
 
 def _find_choice(action_table: List[dict], decision: dict) -> Optional[dict]:
     action, size, intent = _normalize_choice(decision)
@@ -669,10 +709,12 @@ def _counterfactual_decision_ev(
         scenario_cf["hero_position"] = hero_position_override
 
     calc = EvCalculator(scenario_cf, simulations=simulations)
-    table = calc.action_table()
-    row = _find_choice(table, decision)
+    row = calc.evaluate_choice(decision)
     if row is None:
-        return float("-inf")
+        table = calc.action_table()
+        row = _find_choice(table, decision)
+        if row is None:
+            return float("-inf")
     return float(row["ev_bb"])
 
 
@@ -1018,10 +1060,18 @@ def _build_leak_report(
     }
 
 
-def evaluate_decision(scenario: dict, decision: dict, simulations: int = 260) -> dict:
+def evaluate_decision(
+    scenario: dict,
+    decision: dict,
+    simulations: int = 260,
+    precomputed_actions: Optional[List[dict]] = None,
+) -> dict:
     """Return EV table, score, and leak explanation for one decision."""
-    calc = EvCalculator(scenario, simulations=simulations)
-    actions = calc.action_table()
+    if precomputed_actions is not None:
+        actions = list(precomputed_actions)
+    else:
+        calc = EvCalculator(scenario, simulations=simulations)
+        actions = calc.action_table()
     if not actions:
         raise ValueError("No legal actions were generated for this scenario")
 

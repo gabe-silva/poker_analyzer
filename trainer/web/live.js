@@ -18,6 +18,10 @@ const state = {
   drillSelectedAction: null,
   drillSelectedSize: null,
   drillSelectedIntent: "value",
+  drillEvalPrefetchResult: null,
+  drillEvalPrefetchKey: null,
+  drillEvalPrefetchController: null,
+  drillEvalPrefetchTimer: null,
   analyzedProfile: null,
   comparedProfiles: [],
   compareLookup: {
@@ -1253,6 +1257,7 @@ async function startDrillHand() {
     return;
   }
   try {
+    resetDrillEvaluationPrefetchState();
     toggleCompareConfig(false);
     setOutputView("none");
     setStatus("Generating profile drill hand...");
@@ -1279,6 +1284,7 @@ async function startDrillHand() {
 }
 
 function renderDrillScenario(s) {
+  resetDrillEvaluationPrefetchState();
   setOutputView("drill");
   const mapped = state.drillMappedArchetype;
   els.drillMeta.textContent =
@@ -1323,6 +1329,7 @@ function renderDrillScenario(s) {
 }
 
 function renderDrillDecisionPanel(scenario) {
+  resetDrillEvaluationPrefetchState();
   const legal = scenario.legal_actions || [];
   const actionButtons = legal
     .map((a) => `<button class="btn-action drill-action-choice" data-action="${a}">${titleCase(a)}</button>`)
@@ -1436,6 +1443,87 @@ function updateDrillDecisionButtonStates() {
   intentButtons.forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.intent === state.drillSelectedIntent);
   });
+  maybePreFetchDrillEval();
+}
+
+function buildCurrentDrillDecision() {
+  const action = state.drillSelectedAction;
+  if (!action) return null;
+  const decision = { action };
+  if (action === "bet" || action === "raise") {
+    if (!state.drillSelectedSize) return null;
+    decision.size_bb = Number(state.drillSelectedSize);
+    decision.intent = state.drillSelectedIntent || "value";
+  }
+  return decision;
+}
+
+function drillEvalDecisionKey(decision) {
+  if (!state.drillScenario?.scenario_id || !decision) return null;
+  return JSON.stringify({
+    scenario_id: state.drillScenario.scenario_id,
+    decision,
+    simulations: 360,
+  });
+}
+
+function resetDrillEvaluationPrefetchState() {
+  if (state.drillEvalPrefetchTimer) {
+    clearTimeout(state.drillEvalPrefetchTimer);
+  }
+  state.drillEvalPrefetchTimer = null;
+  if (state.drillEvalPrefetchController) {
+    state.drillEvalPrefetchController.abort();
+  }
+  state.drillEvalPrefetchController = null;
+  state.drillEvalPrefetchResult = null;
+  state.drillEvalPrefetchKey = null;
+}
+
+async function maybePreFetchDrillEval() {
+  if (!state.drillScenario) return;
+  if (!state.trainingWorkspace || !featureEnabled("allow_live_training")) return;
+  const decision = buildCurrentDrillDecision();
+  if (!decision) return;
+  const key = drillEvalDecisionKey(decision);
+  if (!key) return;
+  if (state.drillEvalPrefetchResult?.key === key) return;
+  if (state.drillEvalPrefetchKey === key) return;
+
+  if (state.drillEvalPrefetchTimer) {
+    clearTimeout(state.drillEvalPrefetchTimer);
+  }
+  state.drillEvalPrefetchTimer = setTimeout(async () => {
+    if (state.drillEvalPrefetchController) {
+      state.drillEvalPrefetchController.abort();
+    }
+    const controller = new AbortController();
+    state.drillEvalPrefetchController = controller;
+    state.drillEvalPrefetchKey = key;
+    try {
+      const result = await apiPost(
+        "/api/evaluate",
+        {
+          scenario_id: state.drillScenario.scenario_id,
+          decision,
+          free_response: "",
+          simulations: 360,
+          persist: false,
+        },
+        { signal: controller.signal },
+      );
+      state.drillEvalPrefetchResult = { key, result };
+    } catch (err) {
+      if (err?.name !== "AbortError") {
+        state.drillEvalPrefetchResult = null;
+      }
+    } finally {
+      if (state.drillEvalPrefetchController === controller) {
+        state.drillEvalPrefetchController = null;
+        state.drillEvalPrefetchKey = null;
+      }
+    }
+  }, 120);
 }
 
 async function submitDrillDecision() {
@@ -1452,20 +1540,10 @@ async function submitDrillDecision() {
     return;
   }
 
-  const action = state.drillSelectedAction;
-  if (!action) {
+  const decision = buildCurrentDrillDecision();
+  if (!decision) {
     setStatus("Select an action first.", true);
     return;
-  }
-
-  const decision = { action };
-  if (action === "bet" || action === "raise") {
-    if (!state.drillSelectedSize) {
-      setStatus("Select a size for bet/raise.", true);
-      return;
-    }
-    decision.size_bb = Number(state.drillSelectedSize);
-    decision.intent = state.drillSelectedIntent || "value";
   }
 
   const freeResponse = els.drillDecisionPanel.querySelector("#drillFreeResponse")?.value || "";
@@ -1477,6 +1555,7 @@ async function submitDrillDecision() {
       decision,
       free_response: freeResponse,
       simulations: 360,
+      persist: true,
     });
     state.drillScenario = result.scenario;
     renderDrillEvaluation(result.evaluation);
@@ -1727,12 +1806,14 @@ async function apiGet(url) {
   return data;
 }
 
-async function apiPost(url, payload) {
+async function apiPost(url, payload, options = {}) {
+  const { signal } = options;
   const res = await fetch(url, {
     method: "POST",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+    signal,
   });
   if (res.status === 401) {
     window.location.href = `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`;

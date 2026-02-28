@@ -10,6 +10,10 @@ const state = {
   selectedSize: null,
   selectedIntent: "value",
   seatDraft: {},
+  evalPrefetchResult: null,
+  evalPrefetchKey: null,
+  evalPrefetchController: null,
+  evalPrefetchTimer: null,
 };
 
 const els = {};
@@ -457,6 +461,7 @@ async function generateScenarioFromPayload(payload, options = {}) {
   }
 
   state.scenario = scenario;
+  resetEvaluationPrefetchState();
   renderScenario(scenario);
   renderDecisionPanel(scenario);
   if (els.feedbackSummary) {
@@ -529,6 +534,7 @@ async function bootstrapTrainer() {
   setStatus(`Loading scenario ${scenarioId}...`);
   const scenario = await apiGet(`/api/scenario?scenario_id=${encodeURIComponent(scenarioId)}`);
   state.scenario = scenario;
+  resetEvaluationPrefetchState();
   localStorage.setItem(LAST_SCENARIO_KEY, scenario.scenario_id);
 
   renderScenario(scenario);
@@ -603,6 +609,7 @@ function renderScenario(s) {
 }
 
 function renderDecisionPanel(scenario) {
+  resetEvaluationPrefetchState();
   const legal = scenario.legal_actions || [];
   const actionButtons = legal
     .map((a) => `<button class="btn-action action-choice" data-action="${a}">${titleCase(a)}</button>`)
@@ -714,25 +721,95 @@ function updateDecisionButtonStates() {
   intentButtons.forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.intent === state.selectedIntent);
   });
+  maybePreFetchEval();
+}
+
+function buildCurrentDecision() {
+  const action = state.selectedAction;
+  if (!action) return null;
+  const decision = { action };
+  if (action === "bet" || action === "raise") {
+    if (!state.selectedSize) return null;
+    decision.size_bb = Number(state.selectedSize);
+    decision.intent = state.selectedIntent || "value";
+  }
+  return decision;
+}
+
+function evalDecisionKey(decision) {
+  if (!state.scenario?.scenario_id || !decision) return null;
+  return JSON.stringify({
+    scenario_id: state.scenario.scenario_id,
+    decision,
+    simulations: 360,
+  });
+}
+
+function resetEvaluationPrefetchState() {
+  if (state.evalPrefetchTimer) {
+    clearTimeout(state.evalPrefetchTimer);
+  }
+  state.evalPrefetchTimer = null;
+  if (state.evalPrefetchController) {
+    state.evalPrefetchController.abort();
+  }
+  state.evalPrefetchController = null;
+  state.evalPrefetchResult = null;
+  state.evalPrefetchKey = null;
+}
+
+async function maybePreFetchEval() {
+  if (!state.scenario) return;
+  const decision = buildCurrentDecision();
+  if (!decision) return;
+  const key = evalDecisionKey(decision);
+  if (!key) return;
+  if (state.evalPrefetchResult?.key === key) return;
+  if (state.evalPrefetchKey === key) return;
+
+  if (state.evalPrefetchTimer) {
+    clearTimeout(state.evalPrefetchTimer);
+  }
+  state.evalPrefetchTimer = setTimeout(async () => {
+    if (state.evalPrefetchController) {
+      state.evalPrefetchController.abort();
+    }
+    const controller = new AbortController();
+    state.evalPrefetchController = controller;
+    state.evalPrefetchKey = key;
+    try {
+      const result = await apiPost(
+        "/api/evaluate",
+        {
+          scenario_id: state.scenario.scenario_id,
+          decision,
+          free_response: "",
+          simulations: 360,
+          persist: false,
+        },
+        { signal: controller.signal },
+      );
+      state.evalPrefetchResult = { key, result };
+    } catch (err) {
+      if (err?.name !== "AbortError") {
+        state.evalPrefetchResult = null;
+      }
+    } finally {
+      if (state.evalPrefetchController === controller) {
+        state.evalPrefetchController = null;
+        state.evalPrefetchKey = null;
+      }
+    }
+  }, 120);
 }
 
 async function submitDecision() {
   if (!state.scenario) return;
-  const action = state.selectedAction;
-  if (!action) {
+  const decision = buildCurrentDecision();
+  if (!decision) {
     setStatus("Select an action first.", true);
     return;
   }
-  const decision = { action };
-  if (action === "bet" || action === "raise") {
-    if (!state.selectedSize) {
-      setStatus("Select a size for bet/raise.", true);
-      return;
-    }
-    decision.size_bb = Number(state.selectedSize);
-    decision.intent = state.selectedIntent || "value";
-  }
-
   const freeResponse = els.decisionPanel.querySelector("#freeResponse")?.value || "";
   try {
     setStatus("Scoring EV...");
@@ -741,6 +818,7 @@ async function submitDecision() {
       decision,
       free_response: freeResponse,
       simulations: 360,
+      persist: true,
     });
     renderEvaluation(result.evaluation);
     setStatus(`Decision saved as attempt #${result.attempt_id}.`);
@@ -886,12 +964,14 @@ async function apiGet(url) {
   return data;
 }
 
-async function apiPost(url, payload) {
+async function apiPost(url, payload, options = {}) {
+  const { signal } = options;
   const res = await fetch(url, {
     method: "POST",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+    signal,
   });
   if (res.status === 401) {
     window.location.href = `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`;

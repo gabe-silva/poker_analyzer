@@ -21,7 +21,7 @@ from trainer.constants import (
     POSITION_SETS,
     STREETS,
 )
-from trainer.ev_engine import evaluate_decision
+from trainer.ev_engine import EvCalculator, evaluate_decision
 from trainer.live_play import LiveMatch
 from trainer.scenario import generate_scenario
 from trainer.storage import TrainerStore
@@ -37,6 +37,9 @@ class TrainerService:
         self.store = TrainerStore(db_path=db_path)
         self.live_sessions: Dict[str, LiveMatch] = {}
         self._profile_cache: Dict[str, Dict[str, Any]] = {}
+        self._evaluation_cache: Dict[str, Dict[str, Any]] = {}
+        self._evaluation_cache_ttl_sec = 300
+        self._evaluation_cache_max = 256
         self._root_dir = Path(__file__).resolve().parent.parent
         self._uploaded_hands_root_dir = self._root_dir / "trainer" / "data" / "uploaded_hands"
         self._uploaded_hands_root_dir.mkdir(parents=True, exist_ok=True)
@@ -54,6 +57,10 @@ class TrainerService:
         scope_dir = self._uploaded_hands_root_dir / self._user_scope_slug(user_scope)
         scope_dir.mkdir(parents=True, exist_ok=True)
         return scope_dir
+
+    @staticmethod
+    def _public_scenario(scenario: dict) -> dict:
+        return {k: v for k, v in scenario.items() if not str(k).startswith("_cached_")}
 
     @staticmethod
     def _sanitize_upload_filename(filename: str, fallback_index: int) -> str:
@@ -75,6 +82,49 @@ class TrainerService:
                 return []
             tokens = [part.strip() for part in re.split(r"[,\n;]+", text)]
         return [token for token in tokens if token]
+
+    @staticmethod
+    def _decision_cache_key(scenario_id: str, decision: dict, simulations: int) -> str:
+        payload = {
+            "scenario_id": scenario_id,
+            "decision": decision,
+            "simulations": int(simulations),
+        }
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+    def _prune_evaluation_cache(self) -> None:
+        now = time.time()
+        expired = [
+            key
+            for key, row in self._evaluation_cache.items()
+            if now - float(row.get("created_at", 0.0)) > self._evaluation_cache_ttl_sec
+        ]
+        for key in expired:
+            self._evaluation_cache.pop(key, None)
+        if len(self._evaluation_cache) <= self._evaluation_cache_max:
+            return
+        ordered = sorted(
+            self._evaluation_cache.items(),
+            key=lambda item: float(item[1].get("created_at", 0.0)),
+        )
+        to_remove = len(self._evaluation_cache) - self._evaluation_cache_max
+        for key, _ in ordered[:to_remove]:
+            self._evaluation_cache.pop(key, None)
+
+    def _get_cached_evaluation(self, key: str) -> dict | None:
+        self._prune_evaluation_cache()
+        row = self._evaluation_cache.get(key)
+        if not row:
+            return None
+        return row.get("evaluation")
+
+    def _put_cached_evaluation(self, key: str, evaluation: dict) -> None:
+        self._evaluation_cache[key] = {
+            "created_at": time.time(),
+            "evaluation": evaluation,
+        }
+        self._prune_evaluation_cache()
 
     def _uploaded_hand_files(self, user_scope: str | None = None) -> List[Path]:
         upload_dir = self._uploaded_hands_dir(user_scope)
@@ -587,14 +637,20 @@ class TrainerService:
 
     def generate(self, payload: dict) -> dict:
         scenario = generate_scenario(payload)
+        # Precompute the full EV action table once per scenario to avoid
+        # recomputing it on every decision submission.
+        precompute_simulations = int(payload.get("simulations", 360))
+        calc = EvCalculator(scenario, simulations=precompute_simulations)
+        scenario["_cached_action_table"] = calc.action_table()
+        scenario["_cached_action_table_simulations"] = precompute_simulations
         self.store.save_scenario(scenario)
-        return scenario
+        return self._public_scenario(scenario)
 
     def get_scenario(self, scenario_id: str) -> dict:
         scenario = self.store.get_scenario(scenario_id)
         if scenario is None:
             raise ValueError(f"Scenario not found: {scenario_id}")
-        return scenario
+        return self._public_scenario(scenario)
 
     def evaluate(self, payload: dict) -> dict:
         scenario_id = payload.get("scenario_id")
@@ -606,22 +662,41 @@ class TrainerService:
 
         free_response = str(payload.get("free_response", "")).strip()
         simulations = int(payload.get("simulations", 260))
+        persist = bool(payload.get("persist", True))
 
         scenario = self.store.get_scenario(scenario_id)
         if scenario is None:
             raise ValueError(f"Scenario not found: {scenario_id}")
 
-        evaluation = evaluate_decision(scenario, decision, simulations=simulations)
-        attempt_id = self.store.save_attempt(
-            scenario=scenario,
-            decision=decision,
-            evaluation=evaluation,
-            free_response=free_response,
-        )
+        cache_key = self._decision_cache_key(str(scenario_id), decision, simulations)
+        evaluation = self._get_cached_evaluation(cache_key)
+        if evaluation is None:
+            cached_actions = None
+            cached_simulations = int(scenario.get("_cached_action_table_simulations", 0) or 0)
+            if cached_simulations == simulations:
+                maybe_rows = scenario.get("_cached_action_table")
+                if isinstance(maybe_rows, list):
+                    cached_actions = maybe_rows
+            evaluation = evaluate_decision(
+                scenario,
+                decision,
+                simulations=simulations,
+                precomputed_actions=cached_actions,
+            )
+            self._put_cached_evaluation(cache_key, evaluation)
+
+        attempt_id = None
+        if persist:
+            attempt_id = self.store.save_attempt(
+                scenario=scenario,
+                decision=decision,
+                evaluation=evaluation,
+                free_response=free_response,
+            )
 
         return {
             "attempt_id": attempt_id,
-            "scenario": scenario,
+            "scenario": self._public_scenario(scenario),
             "evaluation": evaluation,
         }
 
