@@ -1547,19 +1547,27 @@ async function submitDrillDecision() {
   }
 
   const freeResponse = els.drillDecisionPanel.querySelector("#drillFreeResponse")?.value || "";
+  const decisionKey = drillEvalDecisionKey(decision);
+  const prefetched = decisionKey && state.drillEvalPrefetchResult?.key === decisionKey ? state.drillEvalPrefetchResult.result : null;
+  if (prefetched?.evaluation) {
+    renderDrillEvaluation(prefetched.evaluation);
+    setStatus("Using prefetched drill EV result.");
+  }
 
   try {
-    setStatus("Scoring drill EV...");
+    if (!prefetched) {
+      setStatus("Scoring drill EV...");
+    }
     const result = await apiPost("/api/evaluate", {
       scenario_id: state.drillScenario.scenario_id,
       decision,
       free_response: freeResponse,
       simulations: 360,
-      persist: true,
+      persist: false,
     });
     state.drillScenario = result.scenario;
     renderDrillEvaluation(result.evaluation);
-    setStatus(`Drill decision saved as attempt #${result.attempt_id}.`);
+    setStatus("Drill decision evaluated.");
   } catch (err) {
     setStatus(`Drill evaluation failed: ${err.message}`, true);
   }

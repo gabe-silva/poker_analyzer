@@ -743,7 +743,8 @@ class TrainerService:
 
         free_response = str(payload.get("free_response", "")).strip()
         simulations = int(payload.get("simulations", 260))
-        persist = bool(payload.get("persist", True))
+        # Decision tracking is disabled; evaluations are stateless.
+        persist = False
 
         scenario = self.store.get_scenario(scenario_id)
         if scenario is None:

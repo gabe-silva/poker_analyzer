@@ -901,7 +901,7 @@ async function submitDecision() {
   const prefetched = decisionKey && state.evalPrefetchResult?.key === decisionKey ? state.evalPrefetchResult.result : null;
   if (prefetched?.evaluation) {
     renderEvaluation(prefetched.evaluation);
-    setStatus("Using prefetched EV result, saving attempt...");
+    setStatus("Using prefetched EV result.");
   }
   try {
     if (!prefetched) {
@@ -912,10 +912,10 @@ async function submitDecision() {
       decision,
       free_response: freeResponse,
       simulations: 360,
-      persist: true,
+      persist: false,
     });
     renderEvaluation(result.evaluation);
-    setStatus(`Decision saved as attempt #${result.attempt_id}.`);
+    setStatus("Decision evaluated.");
   } catch (err) {
     setStatus(`Evaluation failed: ${err.message}`, true);
   }
