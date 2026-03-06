@@ -181,18 +181,19 @@ function newAccountCtaLabel(tier) {
 function checkoutPlanLabel(tier) {
   const normalized = normalizePlanTier(tier);
   const plan = planByTier(normalized);
-  const fallback = normalized === "elite" ? "Elite Plan ($39/mo)" : normalized === "pro" ? "Pro Plan ($29/mo)" : "Free";
+  const fallback = normalized === "elite" ? "Elite Plan ($9.99/mo)" : normalized === "pro" ? "Pro Plan ($4.99/mo)" : "Free";
   const price = Number(plan?.monthly_price_usd || 0);
   const label = String(plan?.label || "").trim();
+  const priceText = price > 0 ? `$${price.toFixed(2)}/mo` : "";
   if (label) {
     if (price > 0 && !/\$\d+/.test(label)) {
-      return `${label} ($${price}/mo)`;
+      return `${label} (${priceText})`;
     }
     return label;
   }
   if (price > 0 && normalized !== "free") {
     const title = normalized === "elite" ? "Elite Plan" : "Pro Plan";
-    return `${title} ($${price}/mo)`;
+    return `${title} (${priceText})`;
   }
   return fallback;
 }
