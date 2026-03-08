@@ -872,6 +872,73 @@ class LiveMatch:
             final[action] = adherence * (actual[action] * 0.64 + range_shares[action] * 0.36) + (1.0 - adherence) * noise[action]
         return _normalize_distribution(final)
 
+    def _cap_unrealistic_folds(self, distribution: Dict[str, float], call_amount: float) -> Dict[str, float]:
+        """
+        Guardrail for fold/call decisions so very strong holdings do not fold too often.
+
+        The core model intentionally blends actual hand + weighted range + style noise.
+        Without a floor/cap, that blend can produce unrealistic folds (for example sets
+        folding to small turn bets). This method only applies when villain is facing
+        aggression and both fold/call are legal.
+        """
+        hand = self.current_hand
+        if hand is None:
+            return distribution
+        if "fold" not in distribution or "call" not in distribution:
+            return distribution
+
+        call_amount = max(0.0, float(call_amount))
+        if call_amount <= 0:
+            return distribution
+
+        pot = max(1.0, float(hand.pot_bb))
+        pressure = call_amount / pot
+        max_fold: Optional[float] = None
+
+        if hand.street == "preflop":
+            r1 = card_rank(hand.villain_hand[0])
+            r2 = card_rank(hand.villain_hand[1])
+            hi = max(r1, r2)
+            lo = min(r1, r2)
+            is_pair = r1 == r2
+
+            # Premium preflop holdings should almost never fold to normal pressure.
+            if is_pair and hi >= 13 and pressure <= 0.90:  # KK+
+                max_fold = 0.015
+            elif is_pair and hi >= 11 and pressure <= 0.75:  # JJ/QQ
+                max_fold = 0.05
+            elif hi == 14 and lo >= 13 and pressure <= 0.65:  # AK
+                max_fold = 0.05
+        elif len(hand.board) >= 3:
+            rank = best_hand_rank(hand.villain_hand + hand.board)
+            category = rank[0]
+
+            # Postflop made hands should be sticky unless facing huge pressure.
+            if category >= 4 and pressure <= 1.00:  # straight+
+                max_fold = 0.002
+            elif category == 3 and pressure <= 1.00:  # trips/set
+                max_fold = 0.005
+            elif category == 2 and pressure <= 0.75:  # two pair
+                max_fold = 0.04
+            elif category == 1 and pressure <= 0.50:  # one pair
+                top_board_rank = max(card_rank(c) for c in hand.board)
+                pair_rank = rank[1][0] if rank[1] else 0
+                if pair_rank >= top_board_rank:  # top pair or overpair
+                    max_fold = 0.08
+
+        if max_fold is None:
+            return distribution
+
+        fold_p = float(distribution.get("fold", 0.0))
+        if fold_p <= max_fold + 1e-9:
+            return distribution
+
+        adjusted = dict(distribution)
+        overflow = fold_p - max_fold
+        adjusted["fold"] = max_fold
+        adjusted["call"] = float(adjusted.get("call", 0.0)) + overflow
+        return _normalize_distribution(adjusted)
+
     def _sample_action(self, distribution: Dict[str, float]) -> str:
         r = self.rng.random()
         cumulative = 0.0
@@ -1102,6 +1169,7 @@ class LiveMatch:
             hero_checked=False,
             is_raise=is_raise,
         )
+        distribution = self._cap_unrealistic_folds(distribution, call_amount=call_amount)
         selected = self._sample_action(distribution)
         if selected == "fold":
             hand.action_history.append("Villain folds.")
